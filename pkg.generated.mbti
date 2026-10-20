@@ -6,7 +6,7 @@ import {
 }
 
 // Values
-pub let depth : Int
+pub let depth : Int32
 
 pub fn dump(Json, sort? : Bool) -> Bytes
 
@@ -40,9 +40,9 @@ pub impl Show for Refused
 
 // Types and methods
 pub(all) struct At {
-  at : Int
-  line : Int
-  column : Int
+  at : Int32
+  line : Int32
+  column : Int32
 } derive(Eq, @debug.Debug)
 pub fn At::equal(Self, Self) -> Bool
 pub fn At::not_equal(Self, Self) -> Bool
@@ -52,10 +52,10 @@ pub fn At::to_string(Self) -> String
 pub impl Show for At
 
 pub(all) struct Flavor {
-  depth : Int
+  depth : Int32
 } derive(Eq, @debug.Debug)
 pub fn Flavor::equal(Self, Self) -> Bool
-pub fn Flavor::new(depth? : Int) -> Self
+pub fn Flavor::new(depth? : Int32) -> Self
 pub fn Flavor::not_equal(Self, Self) -> Bool
 pub fn Flavor::to_repr(Self) -> @debug.Repr
 

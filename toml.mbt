@@ -5,9 +5,9 @@
 /// Where in the source something is: the offset in code units, and the line and
 /// column a person counts from one.
 pub(all) struct At {
-  at : Int
-  line : Int
-  column : Int
+  at : Int32
+  line : Int32
+  column : Int32
 } derive(Eq, Debug)
 
 ///|
@@ -97,7 +97,7 @@ pub fn Refused::at(self : Refused) -> At {
 /// not a policy, so making it configurable would be offering to read a document the
 /// format says is not one.
 pub(all) struct Flavor {
-  depth : Int
+  depth : Int32
 } derive(Eq, Debug)
 
 ///|
@@ -111,7 +111,7 @@ pub extend Flavor with Eq::{not_equal, equal}
 ///
 /// 500 is what this family uses for JSON and YAML, between Jackson's 1000 and
 /// serde_json's 128.
-pub let depth : Int = 500
+pub let depth : Int32 = 500
 
 ///|
 /// The preset.
@@ -119,7 +119,7 @@ pub let strict : Flavor = { depth, }
 
 ///|
 /// A flavor by name, every knob with the preset's value.
-pub fn Flavor::new(depth? : Int = depth) -> Flavor {
+pub fn Flavor::new(depth~ : Int32 = depth) -> Flavor {
   { depth, }
 }
 
@@ -128,7 +128,7 @@ pub fn Flavor::new(depth? : Int = depth) -> Flavor {
 ///
 /// TOML defines one document rather than a stream, so there is no plural form of
 /// this — unlike `moonyaml`, where `---` makes both meaningful.
-pub fn loads(src : StringView, flavor? : Flavor = strict) -> Json raise Refused {
+pub fn loads(src : StringView, flavor~ : Flavor = strict) -> Json raise Refused {
   Reader::new(src, flavor).document()
 }
 
@@ -140,8 +140,8 @@ pub fn loads(src : StringView, flavor? : Flavor = strict) -> Json raise Refused 
 /// helps nobody. Pass `bom=false` to hold the format to its word.
 pub fn load(
   src : BytesView,
-  flavor? : Flavor = strict,
-  bom? : Bool = true,
+  flavor~ : Flavor = strict,
+  bom~ : Bool = true,
 ) -> Json raise Refused {
   let text = @utf8.decode(src, ignore_bom=bom) catch {
     _ => raise BadUtf8({ at: 0, line: 1, column: 1, })

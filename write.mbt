@@ -13,7 +13,7 @@
 /// `sort` orders keys by name; off, they keep the order the tree has. A document
 /// read by this module and written again carries the same values, but not
 /// necessarily the same layout — TOML can spell the same tree several ways.
-pub fn dumps(value : Json, sort? : Bool = false) -> String {
+pub fn dumps(value : Json, sort~ : Bool = false) -> String {
   let out = StringBuilder()
   match value {
     Object(fields) => table(out, fields, [], sort)
@@ -27,7 +27,7 @@ pub fn dumps(value : Json, sort? : Bool = false) -> String {
 
 ///|
 /// The same, as UTF-8 bytes.
-pub fn dump(value : Json, sort? : Bool = false) -> Bytes {
+pub fn dump(value : Json, sort~ : Bool = false) -> Bytes {
   @utf8.encode(dumps(value, sort~)[:])
 }
 

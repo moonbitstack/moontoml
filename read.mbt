@@ -20,9 +20,9 @@ priv enum Kind {
 /// Where the reader is and what it has built.
 priv struct Reader {
   src : StringView
-  mut pos : Int
-  mut line : Int
-  mut bol : Int
+  mut pos : Int32
+  mut line : Int32
+  mut bol : Int32
   flavor : Flavor
   root : Map[String, Json]
   // The table that bare keys land in, and its dotted path.
@@ -61,7 +61,7 @@ fn Reader::eof(self : Reader) -> Bool {
 }
 
 ///|
-fn Reader::cur(self : Reader) -> Int {
+fn Reader::cur(self : Reader) -> Int32 {
   if self.pos < self.src.length() {
     self.src[self.pos].to_int()
   } else {
@@ -70,7 +70,7 @@ fn Reader::cur(self : Reader) -> Int {
 }
 
 ///|
-fn Reader::ahead(self : Reader, k : Int) -> Int {
+fn Reader::ahead(self : Reader, k : Int32) -> Int32 {
   if self.pos + k < self.src.length() {
     self.src[self.pos + k].to_int()
   } else {
@@ -394,7 +394,7 @@ fn join(path : Array[String]) -> String {
 
 ///|
 /// A value of any kind.
-fn Reader::value(self : Reader, depth : Int) -> Json raise Refused {
+fn Reader::value(self : Reader, depth : Int32) -> Json raise Refused {
   if depth > self.flavor.depth {
     raise TooDeep(self.at())
   }
@@ -419,7 +419,7 @@ fn Reader::value(self : Reader, depth : Int) -> Json raise Refused {
 
 ///|
 /// An array, which may span lines and may end with a comma (§Array).
-fn Reader::array(self : Reader, depth : Int) -> Json raise Refused {
+fn Reader::array(self : Reader, depth : Int32) -> Json raise Refused {
   let at = self.at()
   self.bump()
   let out : Array[Json] = []
@@ -450,7 +450,7 @@ fn Reader::array(self : Reader, depth : Int) -> Json raise Refused {
 /// added to it afterwards, which is why it is marked `Inline` rather than `Direct`.
 /// TOML 1.0.0 also keeps it on one line and forbids a trailing comma, both of which
 /// are refused here rather than tolerated.
-fn Reader::inline(self : Reader, depth : Int) -> Json raise Refused {
+fn Reader::inline(self : Reader, depth : Int32) -> Json raise Refused {
   let at = self.at()
   self.bump()
   let fields : Map[String, Json] = Map([])
@@ -554,11 +554,11 @@ fn Reader::scalar(self : Reader) -> Json raise Refused {
 ///|
 /// Whether the run at `from` begins `HH:MM`, which is the only thing that may
 /// follow the space inside a date-time.
-fn Reader::looks_like_time(self : Reader, from : Int) -> Bool {
+fn Reader::looks_like_time(self : Reader, from : Int32) -> Bool {
   if from + 5 > self.src.length() {
     return false
   }
-  let d = fn(i : Int) -> Bool {
+  let d = fn(i : Int32) -> Bool {
     let c = self.src[i].to_int()
     c >= 0x30 && c <= 0x39
   }
@@ -730,14 +730,14 @@ fn strip_underscores(s : String, at : At) -> String raise Refused {
 }
 
 ///|
-fn is_alnum(c : Int) -> Bool {
+fn is_alnum(c : Int32) -> Bool {
   (c >= 0x30 && c <= 0x39) ||
   (c >= 0x41 && c <= 0x46) ||
   (c >= 0x61 && c <= 0x66)
 }
 
 ///|
-fn nibble(c : Int) -> Int? {
+fn nibble(c : Int32) -> Int32? {
   if c >= 0x30 && c <= 0x39 {
     Some(c - 0x30)
   } else if c >= 0x61 && c <= 0x66 {
@@ -750,7 +750,7 @@ fn nibble(c : Int) -> Int? {
 }
 
 ///|
-fn index_of(s : String, u : Int) -> Int {
+fn index_of(s : String, u : Int32) -> Int32 {
   for i = 0; i < s.length(); i = i + 1 {
     if s[i].to_int() == u {
       return i
@@ -946,7 +946,7 @@ fn Reader::escape(self : Reader, out : StringBuilder) -> Unit raise Refused {
 fn Reader::hex(
   self : Reader,
   out : StringBuilder,
-  n : Int,
+  n : Int32,
   at : At,
 ) -> Unit raise Refused {
   let mut v = 0
