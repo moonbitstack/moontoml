@@ -21,11 +21,11 @@ tags = [ "garden", "soil" ]
 
 [author]
 name = "A. Ledger"
-place = "京都"
+place = "北京"
 
 [[entry]]
 on = 2026-03-02
-note = "初霜"
+note = "霜降"
 `,
   },
   {
