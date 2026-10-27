@@ -15,3 +15,5 @@ description = "moontoml — TOML 1.0.0 for MoonBit. Read a document into a `Json
 import {
   "moonbitstack/moondate@0.1.0",
 }
+
+source = "src"

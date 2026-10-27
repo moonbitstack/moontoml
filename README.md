@@ -168,12 +168,12 @@ a number was written as travel beside the value whenever RFC 8259 spells it the 
 
 | Example | What it shows |
 |---|---|
-| [`examples/basic`](https://github.com/moonbitstack/moontoml/tree/master/examples/basic) | the four steps: load, read, edit, dump |
-| [`examples/integration`](https://github.com/moonbitstack/moontoml/tree/master/examples/integration) | a site config read into a struct, changed, written back sorted, and a refusal reported by line |
+| [`src/examples/basic`](https://github.com/moonbitstack/moontoml/tree/master/src/examples/basic) | the four steps: load, read, edit, dump |
+| [`src/examples/integration`](https://github.com/moonbitstack/moontoml/tree/master/src/examples/integration) | a site config read into a struct, changed, written back sorted, and a refusal reported by line |
 
 ```bash
-moon run examples/basic
-moon run examples/integration
+moon run src/examples/basic
+moon run src/examples/integration
 ```
 
 ## Licence

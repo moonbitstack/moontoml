@@ -64,4 +64,4 @@ body { font-size: 16px; }
 .nav a { font-size: .58rem; letter-spacing: .05em; }
 .theme { padding: 0 9px; font-size: .58rem; letter-spacing: .06em; }
 }
-@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
+@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}html,button,input,textarea,select{font-variant-ligatures:no-contextual}

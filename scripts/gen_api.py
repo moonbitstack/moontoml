@@ -12,6 +12,7 @@ import pathlib
 import re
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+SRC = ROOT / "src"
 PACKAGES = [
     (
         "moonbitstack/moontoml",
@@ -40,7 +41,7 @@ KIND = {
 def docs_of(folder):
     """Doc comments by declared name, and by `Type.field` for fields and variants."""
     out = {}
-    for path in sorted((ROOT / folder).glob("*.mbt")):
+    for path in sorted((SRC / folder).glob("*.mbt")):
         if path.name.endswith("_test.mbt") or path.name.endswith("_wbtest.mbt"):
             continue
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -78,7 +79,7 @@ def docs_of(folder):
 
 def items_of(folder):
     """Declarations from the interface file: (kind, name, text, owner)."""
-    text = (ROOT / folder / "pkg.generated.mbti").read_text(encoding="utf-8").splitlines()
+    text = (SRC / folder / "pkg.generated.mbti").read_text(encoding="utf-8").splitlines()
     items, block = [], None
     for line in text:
         if block is not None:

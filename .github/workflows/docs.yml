@@ -2,7 +2,13 @@ name: Docs
 
 on:
   push:
-    branches: [master]
+    branches:
+      - master
+    paths:
+      - "docs/**"
+      - "src/**"
+      - "scripts/**"
+      - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 permissions:
@@ -15,53 +21,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: install moonbit
-        run: |
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      # The ledger on the home page is the real library, compiled to JavaScript
-      # here. The bundle is a build artefact and is not committed.
-      - name: build the library for the ledger
-        run: |
-          moon update
-          moon build examples/inspector --target js --release
-          mkdir -p docs/engine
-          cp _build/js/release/build/examples/inspector/inspector.js docs/engine/moontoml.js
-
-      - name: build the site
-        working-directory: docs
-        run: |
-          npm install --no-audit --no-fund
-          npm run build
-
-      - name: assemble the published files
-        run: |
-          mkdir -p _site
-          cp docs/index.html docs/guide.html docs/api.html _site/
-          cp -r docs/assets docs/engine _site/
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-
   deploy:
-    needs: build
     runs-on: ubuntu-26.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: install moon
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+
+      - name: build the site
+        run: |
+          moon update
+          moon build --target js --release src/examples/inspector
+          mkdir -p docs/engine
+          cp _build/js/release/build/examples/inspector/inspector.js docs/engine/moontoml.js
+          (cd docs && npm install --no-audit --no-fund && npm run build)
+          python3 scripts/gen_api.py
+          git diff --exit-code docs/api.html
+          mkdir -p _site
+          cp docs/index.html docs/guide.html docs/api.html _site/
+          cp -r docs/assets docs/engine _site/
+
+
+      - name: configure pages
+        uses: actions/configure-pages@v6
+        with:
+          enablement: true
+
+      - name: upload the site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+      - name: deploy
+        id: deployment
+        uses: actions/deploy-pages@v5
