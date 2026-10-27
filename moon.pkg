@@ -1,5 +1,4 @@
-// TOML 1.0.0, https://toml.io/en/v1.0.0 — read and written as the same `Json`
-// tree every other reader in this family produces.
+// TOML 1.0.0, https://toml.io/en/v1.0.0 — read and written as a `Json` tree.
 //
 // TOML defines one document, not a stream, so there is no plural form of the
 // four entry points. Dates and 64-bit integers are where the tree is narrower
