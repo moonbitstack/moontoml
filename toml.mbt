@@ -27,10 +27,9 @@ pub extend At with Eq::{not_equal, equal}
 ///|
 /// Why a document was refused.
 ///
-/// `Redefined` is the one TOML has that JSON does not: §1 says a key may be
-/// defined only once, and so may a table, so a second definition is an error
-/// rather than a value that wins. It is the rule that makes a TOML file safe to
-/// append to.
+/// `Redefined` is the rule that matters most: §1 says a key may be defined only
+/// once, and so may a table, so a second definition is an error rather than a
+/// value that wins. It is the rule that makes a TOML file safe to append to.
 pub(all) suberror Refused {
   Unexpected(At, Char)
   Truncated(At)
@@ -90,7 +89,7 @@ pub fn Refused::at(self : Refused) -> At {
 ///|
 /// How a document is read.
 ///
-/// The preset is [`strict`]. Build another with [`Flavor::new`], or update one in
+/// The preset is `strict`. Build another with `Flavor::new`, or update one in
 /// place with `{ ..strict, depth: 64 }`.
 ///
 /// There is no knob for a repeated key. TOML 1.0.0 §1 makes redefinition an error,
@@ -109,8 +108,8 @@ pub extend Flavor with Eq::{not_equal, equal}
 ///|
 /// How deep a document may nest.
 ///
-/// 500 is what this family uses for JSON and YAML, between Jackson's 1000 and
-/// serde_json's 128.
+/// 500 is the preset: deep enough for real configuration, shallow enough that a
+/// hostile document cannot run the stack out.
 pub let depth : Int32 = 500
 
 ///|
@@ -127,7 +126,7 @@ pub fn Flavor::new(depth~ : Int32 = depth) -> Flavor {
 /// The document in `src`.
 ///
 /// TOML defines one document rather than a stream, so there is no plural form of
-/// this — unlike `moonyaml`, where `---` makes both meaningful.
+/// this.
 pub fn loads(src : StringView, flavor~ : Flavor = strict) -> Json raise Refused {
   Reader::new(src, flavor).document()
 }

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API — moontoml</title>
+<meta name="description" content="Every public type, function and value of moontoml, with its signature and what it does.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2309251C'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='20' fill='%23F8EADC' text-anchor='middle'%3Em%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=JetBrains+Mono:wght@400;500&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem("moontoml-theme") || "light";
+      document.documentElement.dataset.theme = t === "dark" ? "dark" : "light";
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+<header class="bar">
+  <div class="bar-in">
+    <a class="brand" href="./">
+      <span class="brand-name">moon<b>toml</b></span>
+      <span class="brand-sub">TOML for MoonBit</span>
+    </a>
+    <nav class="nav">
+      <a href="./">Home</a>
+      <a href="guide.html">Guide</a>
+      <a href="api.html" aria-current="page">API</a>
+    </nav>
+    <div class="bar-right">
+      <button class="theme" type="button" aria-label="Switch theme"><span class="t-full">Light / dark</span><span class="t-short">Theme</span></button>
+      <a class="gh" href="https://github.com/moonbitstack/moontoml" aria-label="Source on GitHub">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.22 1.88.87 2.34.66.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      </a>
+    </div>
+  </div>
+</header>
+
+<div class="api">
+  <aside class="index" aria-label="Index">
+<div class="grp"><b>moonbitstack/moontoml</b>
+<a href="#moontoml-refused">Refused</a>
+<a href="#moontoml-at">At</a>
+<a href="#moontoml-flavor">Flavor</a>
+<a href="#moontoml-functions">Functions</a>
+<a href="#moontoml-values">Values</a>
+</div>
+  </aside>
+  <div class="reference">
+    <p class="eyebrow">Reference</p>
+    <h1>API</h1>
+    <p class="lede">Every public type, function and value. Signatures are the ones the compiler writes; the notes are the documentation comments in the source.</p>
+<section id="moontoml-top"><h2>moonbitstack/moontoml</h2><p>TOML 1.0.0: read a document into a Json tree, and write a Json tree back as TOML.</p>
+<article id="moontoml-refused"><h3><span class="kind">error</span> Refused</h3>
+<p>Why a document was refused.</p><p><code>Redefined</code> is the rule that matters most: §1 says a key may be defined only once, and so may a table, so a second definition is an error rather than a value that wins. It is the rule that makes a TOML file safe to append to.</p>
+<pre class="sig"><code>pub(all) suberror Refused {
+  Unexpected(At, Char)
+  Truncated(At)
+  BadEscape(At)
+  BadNumber(At)
+  BadDate(At)
+  Redefined(At, String)
+  Trailing(At)
+  TooDeep(At)
+  BadUtf8(At)
+} derive(Eq, @debug.Debug)</code></pre>
+<div class="member" id="moontoml-refused-at"><pre class="sig"><code>pub fn Refused::at(Self) -&gt; At</code></pre><p>Where the refusal happened.</p><p>Every variant carries a position, so a caller reporting a line does not have to match all nine of them to get at it.</p></div>
+</article>
+<article id="moontoml-at"><h3><span class="kind">struct</span> At</h3>
+<p>Where in the source something is: the offset in code units, and the line and column a person counts from one.</p>
+<pre class="sig"><code>pub(all) struct At {
+  at : Int32
+  line : Int32
+  column : Int32
+} derive(Eq, @debug.Debug)</code></pre>
+</article>
+<article id="moontoml-flavor"><h3><span class="kind">struct</span> Flavor</h3>
+<p>How a document is read.</p><p>The preset is <code>strict</code>. Build another with <code>Flavor::new</code>, or update one in place with <code>{ ..strict, depth: 64 }</code>.</p><p>There is no knob for a repeated key. TOML 1.0.0 §1 makes redefinition an error, not a policy, so making it configurable would be offering to read a document the format says is not one.</p>
+<pre class="sig"><code>pub(all) struct Flavor {
+  depth : Int32
+} derive(Eq, @debug.Debug)</code></pre>
+<div class="member" id="moontoml-flavor-new"><pre class="sig"><code>pub fn Flavor::new(depth? : Int32) -&gt; Self</code></pre><p>A flavor by name, every knob with the preset&#x27;s value.</p></div>
+</article>
+<h3 id="moontoml-functions">Functions</h3>
+<div class="member" id="moontoml-dump"><pre class="sig"><code>pub fn dump(Json, sort? : Bool) -&gt; Bytes</code></pre><p>The same, as UTF-8 bytes.</p></div>
+<div class="member" id="moontoml-dumps"><pre class="sig"><code>pub fn dumps(Json, sort? : Bool) -&gt; String</code></pre><p>Write a <code>Json</code> tree as a TOML document.</p><p>Tables go under their own headers and scalars stay at the level they are on, so the output reads like a configuration file someone wrote rather than one a program emitted. An array of tables is written as <code>[[…]]</code> when every one of its elements is a table, and inline otherwise, which is the only honest choice: TOML has no way to spell an array mixing tables with scalars across headers.</p><p><code>sort</code> orders keys by name; off, they keep the order the tree has. A document read by this module and written again carries the same values, but not necessarily the same layout — TOML can spell the same tree several ways.</p></div>
+<div class="member" id="moontoml-load"><pre class="sig"><code>pub fn load(BytesView, flavor? : Flavor, bom? : Bool) -&gt; Json raise Refused</code></pre><p>The document in <code>src</code>, decoded as UTF-8.</p><p>TOML 1.0.0 §1 says a file is UTF-8 and does not allow a byte-order mark; <code>bom</code> skips one anyway, because an editor on Windows writes it and refusing the file helps nobody. Pass <code>bom=false</code> to hold the format to its word.</p></div>
+<div class="member" id="moontoml-loads"><pre class="sig"><code>pub fn loads(StringView, flavor? : Flavor) -&gt; Json raise Refused</code></pre><p>The document in <code>src</code>.</p><p>TOML defines one document rather than a stream, so there is no plural form of this.</p></div>
+<h3 id="moontoml-values">Values</h3>
+<div class="member" id="moontoml-depth"><pre class="sig"><code>pub let depth : Int32</code></pre><p>How deep a document may nest.</p><p>500 is the preset: deep enough for real configuration, shallow enough that a hostile document cannot run the stack out.</p></div>
+<div class="member" id="moontoml-strict"><pre class="sig"><code>pub let strict : Flavor</code></pre><p>The preset.</p></div>
+</section>
+  </div>
+</div>
+
+<footer class="foot">
+  <div class="foot-in">
+    <span>moontoml · TOML 1.0.0 · Apache-2.0</span>
+    <a href="https://mooncakes.io/docs/moonbitstack/moontoml">mooncakes</a>
+    <span class="spread"></span>
+    <a href="https://github.com/moonbitstack/moontoml">github.com/moonbitstack/moontoml</a>
+  </div>
+</footer>
+<script type="module" src="assets/page.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "moonbitstack/moontoml/examples/inspector"
+
+// Values
+pub fn inspect(String, Bool) -> String
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits
