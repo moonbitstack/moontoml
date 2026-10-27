@@ -1,0 +1,67 @@
+name: Docs
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: install moonbit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The ledger on the home page is the real library, compiled to JavaScript
+      # here. The bundle is a build artefact and is not committed.
+      - name: build the library for the ledger
+        run: |
+          moon update
+          moon build examples/inspector --target js --release
+          mkdir -p docs/engine
+          cp _build/js/release/build/examples/inspector/inspector.js docs/engine/moontoml.js
+
+      - name: build the site
+        working-directory: docs
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+
+      - name: assemble the published files
+        run: |
+          mkdir -p _site
+          cp docs/index.html docs/guide.html docs/api.html _site/
+          cp -r docs/assets docs/engine _site/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-26.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -7,3 +7,6 @@ target/
 package-lock.json
 pnpm-lock.yaml
 yarn-lock.yaml
+docs/node_modules/
+docs/engine/
+docs/assets/app.js

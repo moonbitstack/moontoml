@@ -52,3 +52,10 @@ jobs:
       - name: interfaces are up to date
         run: |
           moon info --target all && git diff --exit-code
+
+      - name: docs api is up to date
+        shell: bash
+        run: |
+          if command -v python3 >/dev/null 2>&1; then PY=python3; else PY=python; fi
+          "$PY" scripts/gen_api.py
+          git diff --exit-code docs/api.html
