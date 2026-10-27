@@ -145,11 +145,16 @@ code, pre, kbd { font-family: var(--mono); }
 .nav a:hover { color: var(--rust); text-decoration: none; }
 .nav a[aria-current="page"] { color: var(--rust); border-bottom-color: var(--rust); }
 
-.bar-right { display: flex; align-items: center; gap: 12px; }
+.bar-right { display: flex; align-items: center; gap: 10px; }
 
+/* Both corner controls are the same 32px tall, or the circle and the
+   rectangle sit half a pixel apart and the eye catches it. The octocat fills
+   its whole viewBox, so it is drawn at 15px inside a 32px ring: the ink then
+   takes just under half the diameter, the same weight as the type beside it. */
 .gh {
-  width: 30px;
-  height: 30px;
+  flex: none;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   border: 1px solid var(--rule-strong);
@@ -158,17 +163,21 @@ code, pre, kbd { font-family: var(--mono); }
   transition: background-color .2s ease, color .2s ease;
 }
 .gh:hover { background: var(--ink); color: var(--paper); text-decoration: none; }
-.gh svg { width: 16px; height: 16px; }
+.gh svg { display: block; width: 15px; height: 15px; }
 
 .theme {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 12px;
   font-family: var(--mono);
   font-size: .64rem;
+  line-height: 1;
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--ink-soft);
   background: transparent;
   border: 1px solid var(--rule-strong);
-  padding: 7px 10px;
   cursor: pointer;
   transition: background-color .2s ease, color .2s ease;
 }
@@ -1064,6 +1073,18 @@ dl.fields dd { margin: 0; color: var(--ink-soft); font-size: .94rem; }
   .stat + .stat { border-top: 1px solid var(--rule); }
   .ledger-tools { gap: 10px; }
   .marginalia { font-size: 1.05rem; }
+}
+
+/* Below about 390px the four things in the bar no longer fit on one line, and
+   the icon is the part that gets pushed off the edge. Everything contracts a
+   step so the row still ends at the margin. */
+@media (width <= 400px) {
+  .bar-in { padding-left: 14px; padding-right: 14px; gap: 8px; }
+  .bar-right { gap: 8px; }
+  .brand-name { font-size: 1.2rem; }
+  .nav { gap: 9px; }
+  .nav a { font-size: .58rem; letter-spacing: .05em; }
+  .theme { padding: 0 9px; font-size: .58rem; letter-spacing: .06em; }
 }
 }
 
