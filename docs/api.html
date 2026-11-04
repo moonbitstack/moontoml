@@ -68,7 +68,7 @@
   Trailing(At)
   TooDeep(At)
   BadUtf8(At)
-} derive(Eq, @debug.Debug)</code></pre>
+}</code></pre>
 <div class="member" id="moontoml-refused-at"><pre class="sig"><code>pub fn Refused::at(Self) -&gt; At</code></pre><p>Where the refusal happened.</p><p>Every variant carries a position, so a caller reporting a line does not have to match all nine of them to get at it.</p></div>
 </article>
 <article id="moontoml-at"><h3><span class="kind">struct</span> At</h3>
@@ -77,20 +77,20 @@
   at : Int32
   line : Int32
   column : Int32
-} derive(Eq, @debug.Debug)</code></pre>
+}</code></pre>
 </article>
 <article id="moontoml-flavor"><h3><span class="kind">struct</span> Flavor</h3>
 <p>How a document is read.</p><p>The preset is <code>strict</code>. Build another with <code>Flavor::new</code>, or update one in place with <code>{ ..strict, depth: 64 }</code>.</p><p>There is no knob for a repeated key. TOML 1.0.0 §1 makes redefinition an error, not a policy, so making it configurable would be offering to read a document the format says is not one.</p>
 <pre class="sig"><code>pub(all) struct Flavor {
   depth : Int32
-} derive(Eq, @debug.Debug)</code></pre>
+}</code></pre>
 <div class="member" id="moontoml-flavor-new"><pre class="sig"><code>pub fn Flavor::new(depth? : Int32) -&gt; Self</code></pre><p>A flavor by name, every knob with the preset&#x27;s value.</p></div>
 </article>
 <h3 id="moontoml-functions">Functions</h3>
-<div class="member" id="moontoml-dump"><pre class="sig"><code>pub fn dump(Json, sort? : Bool) -&gt; Bytes</code></pre><p>The same, as UTF-8 bytes.</p></div>
-<div class="member" id="moontoml-dumps"><pre class="sig"><code>pub fn dumps(Json, sort? : Bool) -&gt; String</code></pre><p>Write a <code>Json</code> tree as a TOML document.</p><p>Tables go under their own headers and scalars stay at the level they are on, so the output reads like a configuration file someone wrote rather than one a program emitted. An array of tables is written as <code>[[…]]</code> when every one of its elements is a table, and inline otherwise, which is the only honest choice: TOML has no way to spell an array mixing tables with scalars across headers.</p><p><code>sort</code> orders keys by name; off, they keep the order the tree has. A document read by this module and written again carries the same values, but not necessarily the same layout — TOML can spell the same tree several ways.</p></div>
-<div class="member" id="moontoml-load"><pre class="sig"><code>pub fn load(BytesView, flavor? : Flavor, bom? : Bool) -&gt; Json raise Refused</code></pre><p>The document in <code>src</code>, decoded as UTF-8.</p><p>TOML 1.0.0 §1 says a file is UTF-8 and does not allow a byte-order mark; <code>bom</code> skips one anyway, because an editor on Windows writes it and refusing the file helps nobody. Pass <code>bom=false</code> to hold the format to its word.</p></div>
-<div class="member" id="moontoml-loads"><pre class="sig"><code>pub fn loads(StringView, flavor? : Flavor) -&gt; Json raise Refused</code></pre><p>The document in <code>src</code>.</p><p>TOML defines one document rather than a stream, so there is no plural form of this.</p></div>
+<div class="member" id="moontoml-dump"><pre class="sig"><code>pub fn dump(@json.Json, sort? : Bool) -&gt; Bytes</code></pre><p>The same, as UTF-8 bytes.</p></div>
+<div class="member" id="moontoml-dumps"><pre class="sig"><code>pub fn dumps(@json.Json, sort? : Bool) -&gt; String</code></pre><p>Write a <code>Json</code> tree as a TOML document.</p><p>Tables go under their own headers and scalars stay at the level they are on, so the output reads like a configuration file someone wrote rather than one a program emitted. An array of tables is written as <code>[[…]]</code> when every one of its elements is a table, and inline otherwise, which is the only honest choice: TOML has no way to spell an array mixing tables with scalars across headers.</p><p><code>sort</code> orders keys by name; off, they keep the order the tree has. A document read by this module and written again carries the same values, but not necessarily the same layout — TOML can spell the same tree several ways.</p></div>
+<div class="member" id="moontoml-load"><pre class="sig"><code>pub fn load(BytesView, flavor? : Flavor, bom? : Bool) -&gt; @json.Json raise Refused</code></pre><p>The document in <code>src</code>, decoded as UTF-8.</p><p>TOML 1.0.0 §1 says a file is UTF-8 and does not allow a byte-order mark; <code>bom</code> skips one anyway, because an editor on Windows writes it and refusing the file helps nobody. Pass <code>bom=false</code> to hold the format to its word.</p></div>
+<div class="member" id="moontoml-loads"><pre class="sig"><code>pub fn loads(StringView, flavor? : Flavor) -&gt; @json.Json raise Refused</code></pre><p>The document in <code>src</code>.</p><p>TOML defines one document rather than a stream, so there is no plural form of this.</p></div>
 <h3 id="moontoml-values">Values</h3>
 <div class="member" id="moontoml-depth"><pre class="sig"><code>pub let depth : Int32</code></pre><p>How deep a document may nest.</p><p>500 is the preset: deep enough for real configuration, shallow enough that a hostile document cannot run the stack out.</p></div>
 <div class="member" id="moontoml-strict"><pre class="sig"><code>pub let strict : Flavor</code></pre><p>The preset.</p></div>
