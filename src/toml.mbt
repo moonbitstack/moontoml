@@ -4,11 +4,12 @@
 ///|
 /// Where in the source something is: the offset in code units, and the line and
 /// column a person counts from one.
+#derive(Eq, Debug)
 pub(all) struct At {
   at : Int32
   line : Int32
   column : Int32
-} derive(Eq, Debug)
+}
 
 ///|
 pub impl Show for At with fn output(self, logger) {
@@ -30,6 +31,7 @@ pub extend At with Eq::{not_equal, equal}
 /// `Redefined` is the rule that matters most: §1 says a key may be defined only
 /// once, and so may a table, so a second definition is an error rather than a
 /// value that wins. It is the rule that makes a TOML file safe to append to.
+#derive(Eq, Debug)
 pub(all) suberror Refused {
   Unexpected(At, Char)
   Truncated(At)
@@ -40,7 +42,7 @@ pub(all) suberror Refused {
   Trailing(At)
   TooDeep(At)
   BadUtf8(At)
-} derive(Eq, Debug)
+}
 
 ///|
 /// A refusal prints as the fault and the line it is on.
@@ -95,9 +97,10 @@ pub fn Refused::at(self : Refused) -> At {
 /// There is no knob for a repeated key. TOML 1.0.0 §1 makes redefinition an error,
 /// not a policy, so making it configurable would be offering to read a document the
 /// format says is not one.
+#derive(Eq, Debug)
 pub(all) struct Flavor {
   depth : Int32
-} derive(Eq, Debug)
+}
 
 ///|
 pub extend Flavor with Debug::{to_repr}
