@@ -68,3 +68,31 @@ jobs:
           if command -v python3 >/dev/null 2>&1; then PY=python3; else PY=python; fi
           "$PY" scripts/gen_api.py
           git diff --exit-code docs/api.html
+
+      # The corpus the conformance tests read is generated, so it has to match the
+      # script that writes it. Only Linux needs the download, and only once.
+      - name: conformance vectors are up to date
+        if: runner.os == 'Linux'
+        run: |
+          python3 scripts/gen_vectors.py
+          git diff --exit-code
+
+      - uses: actions/setup-node@v7
+        if: runner.os == 'Linux'
+        with:
+          node-version: lts/*
+
+      # The official suite, run the way its authors meant it to be run: the tool
+      # drives the library as a decoder and as an encoder, document by document.
+      - name: toml-test (both directions)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p "$RUNNER_TEMP/toml-test"
+          curl -fsSL -o "$RUNNER_TEMP/toml-test.gz" \
+            https://github.com/toml-lang/toml-test/releases/download/v2.2.0/toml-test-v2.2.0-linux-amd64.gz
+          gunzip -c "$RUNNER_TEMP/toml-test.gz" > "$RUNNER_TEMP/toml-test/toml-test"
+          chmod +x "$RUNNER_TEMP/toml-test/toml-test"
+          moon build --target js --release src/conformance
+          "$RUNNER_TEMP/toml-test/toml-test" test -toml 1.0.0 -color never \
+            -decoder "node scripts/toml_test_driver.mjs decode" \
+            -encoder "node scripts/toml_test_driver.mjs encode"
