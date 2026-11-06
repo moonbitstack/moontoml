@@ -185,7 +185,7 @@ def main():
         print(f"wrote src/conformance/{name}")
     # What is written is not what the formatter leaves; running it here keeps the
     # repository clean after one command, and keeps the check in CI a plain diff.
-    subprocess.run(["moon", "fmt"], cwd=ROOT, check=True, shell=True)
+    subprocess.run(["moon", "fmt"], cwd=ROOT, check=True)
 
 
 if __name__ == "__main__":
