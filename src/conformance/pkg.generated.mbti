@@ -1,0 +1,38 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "moonbitstack/moontoml/conformance"
+
+import {
+  "moonbitlang/core/json",
+  "moonbitstack/moontoml",
+}
+
+// Values
+pub fn accepted() -> Array[Accepted]
+
+pub fn decode_document(Bytes) -> String
+
+pub fn encode_document(Bytes) -> String
+
+pub fn of_typed(@json.Json) -> @moontoml.Value raise
+
+pub fn rejected() -> Array[Rejected]
+
+pub fn typed(@moontoml.Value) -> @json.Json
+
+// Errors
+
+// Types and methods
+pub(all) struct Accepted {
+  name : String
+  src : Bytes
+  want : String
+}
+
+pub(all) struct Rejected {
+  name : String
+  src : Bytes
+}
+
+// Type aliases
+
+// Traits

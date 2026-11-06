@@ -1,0 +1,19 @@
+// Copyright 2026 Leo Cheng
+// SPDX-License-Identifier: Apache-2.0
+
+import {
+  "moonbitstack/moontoml",
+  "moonbitstack/moondate",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+  "moonbitlang/core/encoding/utf8",
+}
+
+options(
+  link: {
+    "js": {
+      "exports": [ "decode_document", "encode_document" ],
+      "format": "esm",
+    },
+  },
+)
