@@ -275,3 +275,115 @@ fn refused(src : String) -> Bool {
     _ => true
   }
 }
+
+///|
+test "a key with a dot in it is not two keys" {
+  // `[a.b]` and `[a."b.c"]` are two tables. A path recorded as a string joined
+  // with dots makes them one, and the second header looks like a repeat.
+  assert_eq(
+    j("[a.b]\nx = 1\n[a.\"b.c\"]\ny = 2"),
+    "{\"a\":{\"b\":{\"x\":1},\"b.c\":{\"y\":2}}}",
+  )
+  assert_eq(
+    j("[a.'d.e']\nx = 1\n[a.b.c]\ny = 2"),
+    "{\"a\":{\"d.e\":{\"x\":1},\"b\":{\"c\":{\"y\":2}}}}",
+  )
+}
+
+///|
+test "each element of an array of tables opens a fresh namespace" {
+  // The `[arr.subtab]` under the second element is a new table, not a repeat of
+  // the one the first element opened.
+  assert_eq(
+    j("[[arr]]\n[arr.subtab]\nv = 1\n\n[[arr]]\n[arr.subtab]\nv = 2"),
+    "{\"arr\":[{\"subtab\":{\"v\":1}},{\"subtab\":{\"v\":2}}]}",
+  )
+  assert_eq(
+    j("[[a]]\n[[a.b]]\n[a.b.c]\nd = 0\n[[a.b]]\n[a.b.c]\nd = 1"),
+    "{\"a\":[{\"b\":[{\"c\":{\"d\":0}},{\"c\":{\"d\":1}}]}]}",
+  )
+  // What the element before it defined is out of scope, so a table of that name
+  // may be opened in the element that follows.
+  assert_eq(
+    j("[[arr]]\nx = 1\n[[arr]]\n[arr.x]\ny = 2"),
+    "{\"arr\":[{\"x\":1},{\"x\":{\"y\":2}}]}",
+  )
+}
+
+///|
+test "an array of tables may not later be opened as a table" {
+  assert_eq(refused("[[tbl]]\n[tbl]"), true)
+  // A table under it may still be opened, inside the element just appended.
+  assert_eq(j("[[t]]\n[t.u]\nx = 1"), "{\"t\":[{\"u\":{\"x\":1}}]}")
+}
+
+///|
+test "an inline table may only be extended by a dotted key in the same brace" {
+  // A key that a value already holds belongs to that value's table, which the
+  // brace closed.
+  assert_eq(
+    refused(
+      "tbl = { fruit = { apple.color = \"red\" }, fruit.apple.texture = { smooth = true } }",
+    ),
+    true,
+  )
+  assert_eq(
+    refused("t = { inner = { dog = \"best\" }, inner.cat = \"worst\" }"),
+    true,
+  )
+  // One this brace made itself may be extended, which is how a dotted key groups
+  // what it defines.
+  assert_eq(j("t = { a.b = 1, a.c = 2 }"), "{\"t\":{\"a\":{\"b\":1,\"c\":2}}}")
+  assert_eq(
+    j("t = { a.b.c = 1, a.b.d = 2 }"),
+    "{\"t\":{\"a\":{\"b\":{\"c\":1,\"d\":2}}}}",
+  )
+}
+
+///|
+test "a time needs its seconds, which the format asks for and a date reader does not" {
+  assert_eq(refused("t = 07:32"), true)
+  assert_eq(refused("t = 1987-07-05T17:45Z"), true)
+  assert_eq(refused("t = 1987-07-05T17:45"), true)
+  assert_eq(j("t = 07:32:00"), "{\"t\":\"07:32:00\"}")
+  // The offset is two digits either side of a colon, and nothing else.
+  assert_eq(refused("t = 1979-05-27T00:32:00-7:00"), true)
+  assert_eq(refused("t = 1979-05-27T00:32:00-0700"), true)
+}
+
+///|
+test "a control character is refused wherever it stands" {
+  assert_eq(refused("a = 1\u{0}"), true)
+  assert_eq(refused("a = \"x\u{7f}\""), true)
+  assert_eq(refused("# a comment\u{0c}"), true)
+  // A carriage return is a line break only as half of a CRLF.
+  assert_eq(refused("a = 1\rb = 2"), true)
+  assert_eq(j("a = 1\r\nb = 2"), "{\"a\":1,\"b\":2}")
+}
+
+///|
+test "a prefixed integer carries no sign" {
+  assert_eq(refused("a = -0x1"), true)
+  assert_eq(refused("a = +0b1"), true)
+  assert_eq(refused("a = 0X1"), true)
+  // Leading zeros are a fault in decimal and allowed after a prefix.
+  assert_eq(j("a = 0x0001"), "{\"a\":1}")
+  assert_eq(refused("a = 0001"), true)
+}
+
+///|
+test "an escape past the last code point is a fault, not a crash" {
+  assert_eq(refused("a = \"\\U00110000\""), true)
+  assert_eq(refused("a = \"\\UFFFFFFFF\""), true)
+  assert_eq(refused("a = \"\\ud800\""), true)
+  assert_eq(j("a = \"\\U0010FFFF\""), "{\"a\":\"\u{10FFFF}\"}")
+}
+
+///|
+test "an underscore groups digits of one base only" {
+  assert_eq(refused("a = 1_e5"), true)
+  assert_eq(refused("a = 1_.5"), true)
+  assert_eq(refused("a = 1._5"), true)
+  assert_eq(refused("a = 0x_1"), true)
+  assert_eq(j("a = 0xdead_beef"), "{\"a\":3735928559}")
+}

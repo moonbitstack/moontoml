@@ -23,7 +23,7 @@ const FEATURES = [
   {
     no: "III",
     title: "Keeps what a double would lose",
-    body: "A number's digits travel beside the value, so 9007199254740993 writes back as itself. Dates are read as RFC 3339 text and written back bare, not quoted.",
+    body: "`decode` gives every value the kind the format says it has: a date is a date, an integer is 64 bits. Through a `Json` tree a number's digits travel beside the value instead, so 9007199254740993 writes back as itself.",
   },
   {
     no: "IV",
@@ -110,9 +110,9 @@ export function Home() {
               <br />a page in the <span className="accent">ledger</span>.
             </h1>
             <p className="lede">
-              <strong>moontoml</strong> reads a TOML document into a <code>Json</code> tree and
-              writes it back. Values survive the round trip. A broken rule comes back with a line
-              and a column.
+              <strong>moontoml</strong> reads a TOML document into a <code>Json</code> tree, or kind
+              for kind, and writes it back. Values survive the round trip. A broken rule comes back
+              with a line and a column.
             </p>
             <div className="cta">
               <a className="btn" href="#ledger">
@@ -138,11 +138,11 @@ export function Home() {
               </div>
               <div className="row">
                 <dt>Entry points</dt>
-                <dd>4</dd>
+                <dd>8</dd>
               </div>
               <div className="row">
                 <dt>Tree</dt>
-                <dd>Json</dd>
+                <dd>Json · Value</dd>
               </div>
             </dl>
             <div className="barcode" aria-hidden="true">

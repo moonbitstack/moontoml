@@ -47,6 +47,8 @@
 <a href="#moontoml-refused">Refused</a>
 <a href="#moontoml-at">At</a>
 <a href="#moontoml-flavor">Flavor</a>
+<a href="#moontoml-real">Real</a>
+<a href="#moontoml-value">Value</a>
 <a href="#moontoml-functions">Functions</a>
 <a href="#moontoml-values">Values</a>
 </div>
@@ -86,11 +88,41 @@
 }</code></pre>
 <div class="member" id="moontoml-flavor-new"><pre class="sig"><code>pub fn Flavor::new(depth? : Int32) -&gt; Self</code></pre><p>A flavor by name, every knob with the preset&#x27;s value.</p></div>
 </article>
+<article id="moontoml-real"><h3><span class="kind">struct</span> Real</h3>
+<p>A float, and the text it was written as.</p><p>TOML spells one number many ways — <code>1e06</code>, <code>1000000.0</code>, <code>1_000_000.0</code> — and a document read and written again should not turn one spelling into another. The text is kept whenever the source had one and it is also a JSON spelling, since that is what a tree of <code>Json</code> can carry; a float built in code has none and is written from its value.</p>
+<pre class="sig"><code>pub(all) struct Real {
+  value : Double
+  repr : String?
+}</code></pre>
+<div class="member" id="moontoml-real-new"><pre class="sig"><code>pub fn Real::new(Double) -&gt; Self</code></pre><p>A float from its value alone.</p></div>
+</article>
+<article id="moontoml-value"><h3><span class="kind">enum</span> Value</h3>
+<p>A TOML value, kind for kind.</p><p>A <code>Json</code> tree has no date-time and only one number, so <code>loads</code> reads a timestamp into text and a 64-bit integer into a double. <code>decode</code> reads the same document and keeps what the format says it is, which is what writing it back without guessing needs.</p>
+<pre class="sig"><code>pub(all) enum Value {
+  String(String)
+  Integer(Int64)
+  Float(Real)
+  Boolean(Bool)
+  Datetime(@moondate.Moment)
+  Array(Array[Value])
+  Table(Map[String, Value])
+}</code></pre>
+<div class="member" id="moontoml-value-array"><pre class="sig"><code>pub fn Value::array(Array[Self]) -&gt; Self</code></pre><p>An array value.</p></div>
+<div class="member" id="moontoml-value-boolean"><pre class="sig"><code>pub fn Value::boolean(Bool) -&gt; Self</code></pre><p>A boolean value.</p></div>
+<div class="member" id="moontoml-value-integer"><pre class="sig"><code>pub fn Value::integer(Int64) -&gt; Self</code></pre><p>An integer value.</p></div>
+<div class="member" id="moontoml-value-string"><pre class="sig"><code>pub fn Value::string(String) -&gt; Self</code></pre><p>A string value.</p></div>
+<div class="member" id="moontoml-value-table"><pre class="sig"><code>pub fn Value::table(Map[String, Self]) -&gt; Self</code></pre><p>A table value, which is what a document is.</p></div>
+<div class="member" id="moontoml-value-to_json"><pre class="sig"><code>pub fn Value::to_json(Self) -&gt; @json.Json</code></pre></div>
+</article>
 <h3 id="moontoml-functions">Functions</h3>
+<div class="member" id="moontoml-decode"><pre class="sig"><code>pub fn decode(StringView, flavor? : Flavor) -&gt; Value raise Refused</code></pre><p>The document in <code>src</code>, kind for kind.</p><p>TOML defines one document rather than a stream, so there is no plural form of this. This is the reading that keeps every distinction the format makes: a date is a date and not text, and an integer is 64 bits and not a double.</p></div>
+<div class="member" id="moontoml-decode_bytes"><pre class="sig"><code>pub fn decode_bytes(BytesView, flavor? : Flavor, bom? : Bool) -&gt; Value raise Refused</code></pre><p>The document in <code>src</code>, decoded as UTF-8.</p><p>TOML 1.0.0 §1 says a file is UTF-8 and does not allow a byte-order mark; <code>bom</code> skips one anyway, because an editor on Windows writes it and refusing the file helps nobody. Pass <code>bom=false</code> to hold the format to its word.</p></div>
 <div class="member" id="moontoml-dump"><pre class="sig"><code>pub fn dump(@json.Json, sort? : Bool) -&gt; Bytes</code></pre><p>The same, as UTF-8 bytes.</p></div>
-<div class="member" id="moontoml-dumps"><pre class="sig"><code>pub fn dumps(@json.Json, sort? : Bool) -&gt; String</code></pre><p>Write a <code>Json</code> tree as a TOML document.</p><p>Tables go under their own headers and scalars stay at the level they are on, so the output reads like a configuration file someone wrote rather than one a program emitted. An array of tables is written as <code>[[…]]</code> when every one of its elements is a table, and inline otherwise, which is the only honest choice: TOML has no way to spell an array mixing tables with scalars across headers.</p><p><code>sort</code> orders keys by name; off, they keep the order the tree has. A document read by this module and written again carries the same values, but not necessarily the same layout — TOML can spell the same tree several ways.</p></div>
-<div class="member" id="moontoml-load"><pre class="sig"><code>pub fn load(BytesView, flavor? : Flavor, bom? : Bool) -&gt; @json.Json raise Refused</code></pre><p>The document in <code>src</code>, decoded as UTF-8.</p><p>TOML 1.0.0 §1 says a file is UTF-8 and does not allow a byte-order mark; <code>bom</code> skips one anyway, because an editor on Windows writes it and refusing the file helps nobody. Pass <code>bom=false</code> to hold the format to its word.</p></div>
-<div class="member" id="moontoml-loads"><pre class="sig"><code>pub fn loads(StringView, flavor? : Flavor) -&gt; @json.Json raise Refused</code></pre><p>The document in <code>src</code>.</p><p>TOML defines one document rather than a stream, so there is no plural form of this.</p></div>
+<div class="member" id="moontoml-dumps"><pre class="sig"><code>pub fn dumps(@json.Json, sort? : Bool) -&gt; String</code></pre><p>Write a <code>Json</code> tree as a TOML document.</p><p>Tables go under their own headers and scalars stay at the level they are on, so the output reads like a configuration file someone wrote rather than one a program emitted. An array of tables is written as <code>[[…]]</code> when every one of its elements is a table, and inline otherwise, which is the only honest choice: TOML has no way to spell an array mixing tables with scalars across headers.</p><p><code>sort</code> orders keys by name; off, they keep the order the tree has. A document read by this module and written again carries the same values, but not necessarily the same layout — TOML can spell the same tree several ways.</p><p>A <code>Json</code> tree says &quot;string&quot; for what may have been a date-time, so this leans on the spelling: a string that is a date-time is written as one. <code>encode</code> writes a <code>Value</code> and needs no such guess.</p></div>
+<div class="member" id="moontoml-encode"><pre class="sig"><code>pub fn encode(Value, sort? : Bool) -&gt; String</code></pre><p>Write a tree of <code>Value</code> as a TOML document.</p><p>Each value keeps the kind it has: a <code>String</code> is quoted even when it reads like a date, an <code>Integer</code> is written as the 64 bits it holds, and a <code>Datetime</code> is written bare, because turning it into a quoted string would change what it is.</p></div>
+<div class="member" id="moontoml-encode_bytes"><pre class="sig"><code>pub fn encode_bytes(Value, sort? : Bool) -&gt; Bytes</code></pre><p>The same, as UTF-8 bytes.</p></div>
+<div class="member" id="moontoml-load"><pre class="sig"><code>pub fn load(BytesView, flavor? : Flavor, bom? : Bool) -&gt; @json.Json raise Refused</code></pre><p>The document in <code>src</code>, decoded as UTF-8, as a tree of <code>Json</code>.</p><p>TOML 1.0.0 §1 says a file is UTF-8 and does not allow a byte-order mark; <code>bom</code> skips one anyway, because an editor on Windows writes it and refusing the file helps nobody. Pass <code>bom=false</code> to hold the format to its word.</p></div>
+<div class="member" id="moontoml-loads"><pre class="sig"><code>pub fn loads(StringView, flavor? : Flavor) -&gt; @json.Json raise Refused</code></pre><p>The document in <code>src</code>, as a tree of <code>Json</code>.</p><p>A date-time comes out as its RFC 3339 text and an integer as a <code>Json</code> number, because a <code>Json</code> tree has no place to keep either apart; <code>decode</code> is the reading that keeps them.</p></div>
 <h3 id="moontoml-values">Values</h3>
 <div class="member" id="moontoml-depth"><pre class="sig"><code>pub let depth : Int32</code></pre><p>How deep a document may nest.</p><p>500 is the preset: deep enough for real configuration, shallow enough that a hostile document cannot run the stack out.</p></div>
 <div class="member" id="moontoml-strict"><pre class="sig"><code>pub let strict : Flavor</code></pre><p>The preset.</p></div>

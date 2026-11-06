@@ -126,11 +126,16 @@ pub fn Flavor::new(depth~ : Int32 = depth) -> Flavor {
 }
 
 ///|
-/// The document in `src`.
+/// The document in `src`, kind for kind.
 ///
 /// TOML defines one document rather than a stream, so there is no plural form of
-/// this.
-pub fn loads(src : StringView, flavor~ : Flavor = strict) -> Json raise Refused {
+/// this. This is the reading that keeps every distinction the format makes: a date
+/// is a date and not text, and an integer is 64 bits and not a double.
+pub fn decode(
+  src : StringView,
+  flavor~ : Flavor = strict,
+) -> Value raise Refused {
+  check_text(src)
   Reader::new(src, flavor).document()
 }
 
@@ -140,13 +145,37 @@ pub fn loads(src : StringView, flavor~ : Flavor = strict) -> Json raise Refused 
 /// TOML 1.0.0 §1 says a file is UTF-8 and does not allow a byte-order mark; `bom`
 /// skips one anyway, because an editor on Windows writes it and refusing the file
 /// helps nobody. Pass `bom=false` to hold the format to its word.
+pub fn decode_bytes(
+  src : BytesView,
+  flavor~ : Flavor = strict,
+  bom~ : Bool = true,
+) -> Value raise Refused {
+  let text = @utf8.decode(src, ignore_bom=bom) catch {
+    _ => raise BadUtf8({ at: 0, line: 1, column: 1, })
+  }
+  decode(text, flavor~)
+}
+
+///|
+/// The document in `src`, as a tree of `Json`.
+///
+/// A date-time comes out as its RFC 3339 text and an integer as a `Json` number,
+/// because a `Json` tree has no place to keep either apart; `decode` is the reading
+/// that keeps them.
+pub fn loads(src : StringView, flavor~ : Flavor = strict) -> Json raise Refused {
+  decode(src, flavor~).to_json()
+}
+
+///|
+/// The document in `src`, decoded as UTF-8, as a tree of `Json`.
+///
+/// TOML 1.0.0 §1 says a file is UTF-8 and does not allow a byte-order mark; `bom`
+/// skips one anyway, because an editor on Windows writes it and refusing the file
+/// helps nobody. Pass `bom=false` to hold the format to its word.
 pub fn load(
   src : BytesView,
   flavor~ : Flavor = strict,
   bom~ : Bool = true,
 ) -> Json raise Refused {
-  let text = @utf8.decode(src, ignore_bom=bom) catch {
-    _ => raise BadUtf8({ at: 0, line: 1, column: 1, })
-  }
-  loads(text, flavor~)
+  decode_bytes(src, flavor~, bom~).to_json()
 }

@@ -11,10 +11,18 @@ license = "Apache-2.0"
 keywords = [
   "toml",
   "toml-1.0",
+  "toml-test",
+  "toml-parser",
+  "toml-encoder",
   "config",
   "configuration",
   "parser",
   "serializer",
+  "decoder",
+  "encoder",
+  "datetime",
+  "rfc3339",
+  "json",
   "moonbit",
 ]
 

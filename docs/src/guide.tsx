@@ -75,11 +75,81 @@ println(doc.stringify())`,
         k: "p",
         text: "A date comes out as the RFC 3339 form, not the text it went in as: `2026-03-01 09:30:00Z` becomes `2026-03-01T09:30:00Z`. A date the calendar does not have is refused.",
       },
+      {
+        k: "p",
+        text: "That is the `Json` reading, and it is as far as a `Json` tree goes: a date is text and a large integer is a double. The next chapter reads the same document and keeps both.",
+      },
+    ],
+  },
+  {
+    id: "kinds",
+    num: "02",
+    title: "Kinds, kept",
+    blocks: [
+      {
+        k: "p",
+        text: "`loads` answers a `Json` tree, which has one number and no date-time. `decode` answers a `Value`, which keeps every kind the format defines.",
+      },
+      {
+        k: "table",
+        head: ["TOML", "loads", "decode"],
+        rows: [
+          ["string", "String", "String"],
+          ["integer", "Number", "Integer, 64 bits"],
+          ["float", "Number", "Float"],
+          ["boolean", "True or False", "Boolean"],
+          ["date-time", "String, RFC 3339", "Datetime, one of four kinds"],
+          ["array", "Array", "Array"],
+          ["table", "Object", "Table"],
+        ],
+      },
+      {
+        k: "p",
+        text: "A date is a date and a string is a string, even when the string is written like one:",
+      },
+      {
+        k: "code",
+        code: String.raw`let doc = @moontoml.decode("when = 1979-05-27\nname = \"1979-05-27\"\n")
+guard doc is Table(fields) else { abort("not a table") }
+let kind = match fields.get("when") {
+  Some(Datetime(_)) => "a date"
+  Some(String(_)) => "text"
+  _ => "nothing"
+}
+println(kind)
+println(@moontoml.encode(doc))`,
+      },
+      { k: "out", text: 'a date\nwhen = 1979-05-27\nname = "1979-05-27"' },
+      {
+        k: "p",
+        text: "`encode` writes a `String` quoted and a `Datetime` bare, so a value keeps the kind it had and nothing is read from the spelling. The four kinds of the format are the four of `Moment`, the date library's type:",
+      },
+      {
+        k: "code",
+        code: String.raw`let doc = @moontoml.decode(
+  "a = 1979-05-27T07:32:00Z\nb = 1979-05-27T07:32:00\nc = 1979-05-27\nd = 07:32:00\n",
+)
+println(@moontoml.encode(doc))`,
+      },
+      {
+        k: "out",
+        text: "a = 1979-05-27T07:32:00Z\nb = 1979-05-27T07:32:00\nc = 1979-05-27\nd = 07:32:00",
+      },
+      {
+        k: "p",
+        text: "An `Integer` is 64 bits, so a value past what a double holds exactly comes back as itself:",
+      },
+      {
+        k: "code",
+        code: String.raw`let doc = @moontoml.decode("big = 9007199254740993\n")
+println(@moontoml.encode(doc))`,
+      },
+      { k: "out", text: "big = 9007199254740993" },
     ],
   },
   {
     id: "reading",
-    num: "02",
+    num: "03",
     title: "Reading values",
     blocks: [
       {
@@ -124,7 +194,7 @@ println("\{name}: \{beds} beds, ph \{ph}")`,
   },
   {
     id: "writing",
-    num: "03",
+    num: "04",
     title: "Writing it back",
     blocks: [
       {
@@ -148,7 +218,7 @@ println(@moontoml.dumps(doc))`,
   },
   {
     id: "bytes",
-    num: "04",
+    num: "05",
     title: "Bytes and the byte-order mark",
     blocks: [
       {
@@ -183,7 +253,7 @@ println(where)`,
   },
   {
     id: "refusals",
-    num: "05",
+    num: "06",
     title: "When it refuses",
     blocks: [
       {
@@ -231,7 +301,7 @@ println(outcome)`,
   },
   {
     id: "limits",
-    num: "06",
+    num: "07",
     title: "Limits",
     blocks: [
       {
@@ -350,7 +420,7 @@ export function Guide() {
             <p className="eyebrow">The guide</p>
             <h1>A whole document, one page at a time.</h1>
             <p className="lede">
-              Seven short chapters. Each one compiles and runs; the output under it is from a real
+              Eight short chapters. Each one compiles and runs; the output under it is from a real
               build, not a sketch.
             </p>
           </header>

@@ -13,16 +13,12 @@
 /// `sort` orders keys by name; off, they keep the order the tree has. A document
 /// read by this module and written again carries the same values, but not
 /// necessarily the same layout — TOML can spell the same tree several ways.
+///
+/// A `Json` tree says "string" for what may have been a date-time, so this leans on
+/// the spelling: a string that is a date-time is written as one. `encode` writes a
+/// `Value` and needs no such guess.
 pub fn dumps(value : Json, sort~ : Bool = false) -> String {
-  let out = StringBuilder()
-  match value {
-    Object(fields) => table(out, fields, [], sort)
-    _ =>
-      // A document is a table; anything else is written as the one key a caller
-      // can read back.
-      table(out, { "value": value }, [], sort)
-  }
-  out.to_string()
+  encode(value_of_json(value), sort~)
 }
 
 ///|
@@ -32,52 +28,82 @@ pub fn dump(value : Json, sort~ : Bool = false) -> Bytes {
 }
 
 ///|
+/// Write a tree of `Value` as a TOML document.
+///
+/// Each value keeps the kind it has: a `String` is quoted even when it reads like a
+/// date, an `Integer` is written as the 64 bits it holds, and a `Datetime` is
+/// written bare, because turning it into a quoted string would change what it is.
+pub fn encode(value : Value, sort~ : Bool = false) -> String {
+  let out = StringBuilder()
+  match value {
+    Table(fields) => ignore(table(out, fields, [], sort, false))
+    _ =>
+      // A document is a table; anything else is written as the one key a caller
+      // can read back.
+      ignore(table(out, { "value": value }, [], sort, false))
+  }
+  out.to_string()
+}
+
+///|
+/// The same, as UTF-8 bytes.
+pub fn encode_bytes(value : Value, sort~ : Bool = false) -> Bytes {
+  @utf8.encode(encode(value, sort~)[:])
+}
+
+///|
 /// One table's scalars, then its sub-tables under their own headers.
+///
+/// Answers whether anything has been written, which is what puts a blank line
+/// between a header and what came before it, but not at the top of the document.
 fn table(
   out : StringBuilder,
-  fields : Map[String, Json],
+  fields : Map[String, Value],
   path : Array[String],
   sort : Bool,
-) -> Unit {
+  started : Bool,
+) -> Bool {
   let names = fields.keys().collect()
   if sort {
     names.sort()
   }
+  let mut has = started
   // Scalars first: a key written after a header would belong to that header.
   for name in names {
     let held = fields.get(name).unwrap()
     if !is_table(held) && !is_table_array(held) {
       write_key(out, name)
       out.write_string(" = ")
-      write_inline(out, held)
+      write_value(out, held)
       out.write_char('\n')
+      has = true
     }
   }
   for name in names {
     let held = fields.get(name).unwrap()
     let here = path + [name]
     match held {
-      Object(inner) => {
-        if out.to_string().length() > 0 {
+      Table(inner) => {
+        if has {
           out.write_char('\n')
         }
         out.write_char('[')
         write_path(out, here)
         out.write_string("]\n")
-        table(out, inner, here, sort)
+        has = table(out, inner, here, sort, true)
       }
       Array(items) =>
         if is_table_array(held) {
           for item in items {
             match item {
-              Object(inner) => {
-                if out.to_string().length() > 0 {
+              Table(inner) => {
+                if has {
                   out.write_char('\n')
                 }
                 out.write_string("[[")
                 write_path(out, here)
                 out.write_string("]]\n")
-                table(out, inner, here, sort)
+                has = table(out, inner, here, sort, true)
               }
               _ => ()
             }
@@ -86,25 +112,26 @@ fn table(
       _ => ()
     }
   }
+  has
 }
 
 ///|
 /// Whether a value is written under a header of its own.
-fn is_table(v : Json) -> Bool {
-  v is Object(_)
+fn is_table(v : Value) -> Bool {
+  v is Table(_)
 }
 
 ///|
 /// Whether a value is an array every element of which is a table, which is the
 /// only shape `[[…]]` can spell.
-fn is_table_array(v : Json) -> Bool {
+fn is_table_array(v : Value) -> Bool {
   match v {
     Array(items) => {
       if items.length() == 0 {
         return false
       }
       for item in items {
-        if !(item is Object(_)) {
+        if !(item is Table(_)) {
           return false
         }
       }
@@ -158,33 +185,30 @@ fn bare(name : String) -> Bool {
 
 ///|
 /// A value on one line: a scalar, an array, or an inline table.
-fn write_inline(out : StringBuilder, value : Json) -> Unit {
+fn write_value(out : StringBuilder, value : Value) -> Unit {
   match value {
-    Null =>
-      // TOML has no null. A caller that needs one spells it, which is what every
-      // encoder in reach does, and an empty string is the least surprising.
-      out.write_string("\"\"")
-    True => out.write_string("true")
-    False => out.write_string("false")
-    Number(n, repr~) =>
-      match repr {
-        // The text a number was read from is kept, so a value past what a Double
-        // holds exactly writes back as the digits it came in as.
-        Some(text) => out.write_string(text)
-        None => write_number(out, n)
-      }
     String(s) => write_string(out, s)
+    Integer(n) => out.write_string(n.to_string())
+    Float(real) =>
+      match real.repr {
+        // The text a number was read from is kept, so a float writes back as it
+        // came in.
+        Some(text) => out.write_string(text)
+        None => write_double(out, real.value)
+      }
+    Boolean(b) => out.write_string(if b { "true" } else { "false" })
+    Datetime(m) => out.write_string(m.to_string())
     Array(items) => {
       out.write_char('[')
       for i = 0; i < items.length(); i = i + 1 {
         if i > 0 {
           out.write_string(", ")
         }
-        write_inline(out, items[i])
+        write_value(out, items[i])
       }
       out.write_char(']')
     }
-    Object(fields) => {
+    Table(fields) => {
       out.write_char('{')
       let names = fields.keys().collect()
       for i = 0; i < names.length(); i = i + 1 {
@@ -195,7 +219,7 @@ fn write_inline(out : StringBuilder, value : Json) -> Unit {
         }
         write_key(out, names[i])
         out.write_string(" = ")
-        write_inline(out, fields.get(names[i]).unwrap())
+        write_value(out, fields.get(names[i]).unwrap())
       }
       out.write_string(" }")
     }
@@ -203,31 +227,38 @@ fn write_inline(out : StringBuilder, value : Json) -> Unit {
 }
 
 ///|
-/// A number as TOML writes it: a whole value with no fractional part, so a port is
-/// `12000` rather than `12000.0`.
-fn write_number(out : StringBuilder, n : Double) -> Unit {
+/// A float as TOML writes it.
+///
+/// A whole float still needs to read back as one, so it keeps a fractional part:
+/// `12000.0`, not `12000`, which would be an integer.
+fn write_double(out : StringBuilder, n : Double) -> Unit {
   if n.is_nan() {
     out.write_string("nan")
   } else if n.is_inf() {
     out.write_string(if n > 0.0 { "inf" } else { "-inf" })
-  } else if n == n.floor() && n.abs() < 1.0e15 {
-    out.write_string(n.to_int64().to_string())
   } else {
-    out.write_string(n.to_string())
+    let text = n.to_string()
+    out.write_string(text)
+    if !has_exponent(text) && index_of(text, 0x2e) < 0 {
+      out.write_string(".0")
+    }
   }
 }
 
 ///|
-/// A string in the form that reads back as itself.
-///
-/// A date-time that came in as one is written bare, because that is what it is:
-/// this module reads TOML's four date-time types into their normalised text, so
-/// quoting it on the way out would turn a timestamp into a string.
-fn write_string(out : StringBuilder, s : String) -> Unit {
-  if is_moment(s) {
-    out.write_string(s)
-    return
+fn has_exponent(text : String) -> Bool {
+  for i = 0; i < text.length(); i = i + 1 {
+    let c = text[i].to_int()
+    if c == 0x65 || c == 0x45 {
+      return true
+    }
   }
+  false
+}
+
+///|
+/// A string in the form that reads back as itself.
+fn write_string(out : StringBuilder, s : String) -> Unit {
   // A string with a line break in it goes in a multi-line literal when it can,
   // which is how a key or a script stays readable.
   if index_of(s, 0x0a) >= 0 &&
@@ -243,8 +274,8 @@ fn write_string(out : StringBuilder, s : String) -> Unit {
 }
 
 ///|
-/// Whether a string is one of the date-times this module reads, and so should be
-/// written back as one.
+/// Whether a string is one of the date-times this module reads, and so is written
+/// back as one when it arrives as a `Json` string.
 fn is_moment(s : String) -> Bool {
   if !dateish(s) {
     return false

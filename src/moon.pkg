@@ -6,5 +6,10 @@
 import {
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/double",
+  "moonbitlang/core/string",
   "moonbitstack/moondate",
 }
+
+import {
+  "moonbitlang/core/json",
+} for "wbtest"

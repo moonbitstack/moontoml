@@ -4,14 +4,23 @@ package "moonbitstack/moontoml"
 import {
   "moonbitlang/core/debug",
   "moonbitlang/core/json",
+  "moonbitstack/moondate",
 }
 
 // Values
+pub fn decode(StringView, flavor? : Flavor) -> Value raise Refused
+
+pub fn decode_bytes(BytesView, flavor? : Flavor, bom? : Bool) -> Value raise Refused
+
 pub let depth : Int32
 
 pub fn dump(@json.Json, sort? : Bool) -> Bytes
 
 pub fn dumps(@json.Json, sort? : Bool) -> String
+
+pub fn encode(Value, sort? : Bool) -> String
+
+pub fn encode_bytes(Value, sort? : Bool) -> Bytes
 
 pub fn load(BytesView, flavor? : Flavor, bom? : Bool) -> @json.Json raise Refused
 
@@ -62,6 +71,39 @@ pub fn Flavor::equal(Self, Self) -> Bool
 pub fn Flavor::new(depth? : Int32) -> Self
 pub fn Flavor::not_equal(Self, Self) -> Bool
 pub fn Flavor::to_repr(Self) -> @debug.Repr
+
+#derive(@debug.Debug)
+pub(all) struct Real {
+  value : Double
+  repr : String?
+}
+pub fn Real::equal(Self, Self) -> Bool
+pub fn Real::new(Double) -> Self
+pub fn Real::not_equal(Self, Self) -> Bool
+pub fn Real::to_repr(Self) -> @debug.Repr
+pub impl Eq for Real
+
+#derive(@debug.Debug)
+pub(all) enum Value {
+  String(String)
+  Integer(Int64)
+  Float(Real)
+  Boolean(Bool)
+  Datetime(@moondate.Moment)
+  Array(Array[Value])
+  Table(Map[String, Value])
+}
+pub fn Value::array(Array[Self]) -> Self
+pub fn Value::boolean(Bool) -> Self
+pub fn Value::equal(Self, Self) -> Bool
+pub fn Value::integer(Int64) -> Self
+pub fn Value::not_equal(Self, Self) -> Bool
+pub fn Value::string(String) -> Self
+pub fn Value::table(Map[String, Self]) -> Self
+pub fn Value::to_json(Self) -> @json.Json
+pub fn Value::to_repr(Self) -> @debug.Repr
+pub impl Eq for Value
+pub impl @json.ToJson for Value
 
 // Type aliases
 

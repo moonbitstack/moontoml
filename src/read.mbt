@@ -9,9 +9,9 @@
 /// it, one created by a dotted key may not later be opened by a header, and an
 /// inline table is closed the moment its brace does.
 priv enum Kind {
-  Direct
+  // A value took the path, or a dotted key made a table there.
+  Taken
   Header
-  Dotted
   Inline
   Tables
 }
@@ -24,17 +24,17 @@ priv struct Reader {
   mut line : Int32
   mut bol : Int32
   flavor : Flavor
-  root : Map[String, Json]
-  // The table that bare keys land in, and its dotted path.
-  mut here : Map[String, Json]
-  mut prefix : String
+  root : Map[String, Value]
+  // The table that bare keys land in, and the path its header named.
+  mut here : Map[String, Value]
+  mut prefix : Array[String]
   // How each dotted path came to exist.
   seen : Map[String, Kind]
 }
 
 ///|
 fn Reader::new(src : StringView, flavor : Flavor) -> Reader {
-  let root : Map[String, Json] = Map([])
+  let root : Map[String, Value] = Map([])
   {
     src,
     pos: 0,
@@ -43,7 +43,7 @@ fn Reader::new(src : StringView, flavor : Flavor) -> Reader {
     flavor,
     root,
     here: root,
-    prefix: "",
+    prefix: [],
     seen: Map([]),
   }
 }
@@ -148,7 +148,7 @@ fn Reader::printable(self : Reader) -> Char {
 
 ///|
 /// The whole document: a run of key-value pairs and table headers.
-fn Reader::document(self : Reader) -> Json raise Refused {
+fn Reader::document(self : Reader) -> Value raise Refused {
   for ;; {
     self.skip()
     if self.eof() {
@@ -160,7 +160,7 @@ fn Reader::document(self : Reader) -> Json raise Refused {
     }
     self.pair()
   }
-  Json::object(self.root)
+  Value::Table(self.root)
 }
 
 ///|
@@ -190,7 +190,7 @@ fn Reader::header(self : Reader) -> Unit raise Refused {
   } else {
     self.open_table(path, at)
   }
-  self.prefix = join(path)
+  self.prefix = path
 }
 
 ///|
@@ -199,17 +199,17 @@ fn Reader::open_table(
   self : Reader,
   path : Array[String],
   at : At,
-) -> Map[String, Json] raise Refused {
+) -> Map[String, Value] raise Refused {
   let full = join(path)
   // A header may not repeat, and may not open something a dotted key already made,
-  // a value already took, or an inline table closed.
-  match self.seen.get(full) {
-    Some(Header) | Some(Direct) | Some(Dotted) | Some(Inline) =>
-      raise Redefined(at, full)
-    _ => ()
+  // a value already took, an array of tables already holds, or an inline table
+  // closed.
+  match self.seen.get(path_key(path)) {
+    Some(_) => raise Redefined(at, full)
+    None => ()
   }
   let table = self.walk(path, at)
-  self.seen[full] = Header
+  self.seen[path_key(path)] = Header
   table
 }
 
@@ -219,23 +219,36 @@ fn Reader::open_tables(
   self : Reader,
   path : Array[String],
   at : At,
-) -> Map[String, Json] raise Refused {
+) -> Map[String, Value] raise Refused {
   let parent = self.walk(path[0:path.length() - 1].to_owned(), at)
   let name = path[path.length() - 1]
   let full = join(path)
-  match self.seen.get(full) {
+  match self.seen.get(path_key(path)) {
     Some(Tables) | None => ()
     Some(_) => raise Redefined(at, full)
   }
-  self.seen[full] = Tables
-  let fresh : Map[String, Json] = Map([])
+  self.seen[path_key(path)] = Tables
+  // A new element is a new namespace: what the element before it defined under the
+  // same array is no longer in scope (§Array of Tables).
+  let under = path_key(path)
+  let defined : Array[String] = []
+  for key, _ in self.seen {
+    if key.length() > under.length() &&
+      key.exact_view(start=0, end=under.length()) == under[:] {
+      defined.push(key)
+    }
+  }
+  for key in defined {
+    self.seen.remove(key)
+  }
+  let fresh : Map[String, Value] = Map([])
   match parent.get(name) {
     Some(Array(items)) => {
-      items.push(Json::object(fresh))
+      items.push(Value::Table(fresh))
       ()
     }
     Some(_) => raise Redefined(at, full)
-    None => parent[name] = Json::array([Json::object(fresh)])
+    None => parent[name] = Value::array([Value::Table(fresh)])
   }
   fresh
 }
@@ -249,34 +262,33 @@ fn Reader::walk(
   self : Reader,
   path : Array[String],
   at : At,
-) -> Map[String, Json] raise Refused {
+) -> Map[String, Value] raise Refused {
   let mut table = self.root
-  let mut so_far = ""
   for i = 0; i < path.length(); i = i + 1 {
     let name = path[i]
-    so_far = if so_far == "" { name } else { so_far + "." + name }
+    let so_far = path[0:i + 1].to_owned()
     match table.get(name) {
-      Some(Object(inner)) => {
-        if self.seen.get(so_far) is Some(Inline) {
-          raise Redefined(at, so_far)
+      Some(Table(inner)) => {
+        if self.seen.get(path_key(so_far)) is Some(Inline) {
+          raise Redefined(at, join(so_far))
         }
         table = inner
       }
       Some(Array(items)) =>
-        if self.seen.get(so_far) is Some(Tables) && items.length() > 0 {
+        if self.seen.get(path_key(so_far)) is Some(Tables) && items.length() > 0 {
           match items[items.length() - 1] {
-            Object(inner) => table = inner
-            _ => raise Redefined(at, so_far)
+            Table(inner) => table = inner
+            _ => raise Redefined(at, join(so_far))
           }
         } else {
-          raise Redefined(at, so_far)
+          raise Redefined(at, join(so_far))
         }
-      Some(_) => raise Redefined(at, so_far)
+      Some(_) => raise Redefined(at, join(so_far))
       None => {
         // A table created on the way to somewhere else is implicit and stays
         // unmarked, so its own header may still open it later (§Table).
-        let fresh : Map[String, Json] = Map([])
-        table[name] = Json::object(fresh)
+        let fresh : Map[String, Value] = Map([])
+        table[name] = Value::Table(fresh)
         table = fresh
       }
     }
@@ -300,36 +312,39 @@ fn Reader::pair(self : Reader) -> Unit raise Refused {
   // A dotted key walks into tables under the current one; the last segment is the
   // key itself.
   let mut table = self.here
-  let mut so_far = self.prefix
+  let walked : Array[String] = []
+  for name in self.prefix {
+    walked.push(name)
+  }
   for i = 0; i < path.length() - 1; i = i + 1 {
     let name = path[i]
-    so_far = if so_far == "" { name } else { so_far + "." + name }
+    walked.push(name)
     match table.get(name) {
-      Some(Object(inner)) => {
+      Some(Table(inner)) => {
         // A dotted key may extend a table it made itself, but not one that a
         // header opened or an inline table closed.
-        match self.seen.get(so_far) {
-          Some(Inline) | Some(Header) => raise Redefined(at, so_far)
+        match self.seen.get(path_key(walked)) {
+          Some(Inline) | Some(Header) => raise Redefined(at, join(walked))
           _ => ()
         }
         table = inner
       }
-      Some(_) => raise Redefined(at, so_far)
+      Some(_) => raise Redefined(at, join(walked))
       None => {
-        let fresh : Map[String, Json] = Map([])
-        table[name] = Json::object(fresh)
-        self.seen[so_far] = Dotted
+        let fresh : Map[String, Value] = Map([])
+        table[name] = Value::Table(fresh)
+        self.seen[path_key(walked)] = Taken
         table = fresh
       }
     }
   }
   let name = path[path.length() - 1]
-  let full = if so_far == "" { name } else { so_far + "." + name }
+  walked.push(name)
   if table.get(name) is Some(_) {
-    raise Redefined(at, full)
+    raise Redefined(at, join(walked))
   }
   table[name] = value
-  self.seen[full] = if value is Object(_) { Inline } else { Direct }
+  self.seen[path_key(walked)] = if value is Table(_) { Inline } else { Taken }
 }
 
 ///|
@@ -378,7 +393,23 @@ fn Reader::key(self : Reader) -> String raise Refused {
 }
 
 ///|
-/// The dotted form of a path, for an error message and for the `seen` table.
+/// A path as one string for the `seen` table, where each segment carries its
+/// length.
+///
+/// Joining with a dot would make `[a.b]` and `[a."b.c"]` the same path, and they
+/// are two tables; the lengths make the reading unambiguous whatever a key holds.
+fn path_key(path : Array[String]) -> String {
+  let out = StringBuilder()
+  for name in path {
+    out.write_string(name.length().to_string())
+    out.write_char(':')
+    out.write_string(name)
+  }
+  out.to_string()
+}
+
+///|
+/// The dotted form of a path, as a person writes it and as a message shows it.
 fn join(path : Array[String]) -> String {
   let out = StringBuilder()
   for i = 0; i < path.length(); i = i + 1 {
@@ -394,22 +425,22 @@ fn join(path : Array[String]) -> String {
 
 ///|
 /// A value of any kind.
-fn Reader::value(self : Reader, depth : Int32) -> Json raise Refused {
+fn Reader::value(self : Reader, depth : Int32) -> Value raise Refused {
   if depth > self.flavor.depth {
     raise TooDeep(self.at())
   }
   match self.cur() {
     0x22 =>
       if self.ahead(1) == 0x22 && self.ahead(2) == 0x22 {
-        Json::string(self.multiline_basic())
+        Value::string(self.multiline_basic())
       } else {
-        Json::string(self.basic())
+        Value::string(self.basic())
       }
     0x27 =>
       if self.ahead(1) == 0x27 && self.ahead(2) == 0x27 {
-        Json::string(self.multiline_literal())
+        Value::string(self.multiline_literal())
       } else {
-        Json::string(self.literal())
+        Value::string(self.literal())
       }
     0x5b => self.array(depth)
     0x7b => self.inline(depth)
@@ -419,10 +450,10 @@ fn Reader::value(self : Reader, depth : Int32) -> Json raise Refused {
 
 ///|
 /// An array, which may span lines and may end with a comma (§Array).
-fn Reader::array(self : Reader, depth : Int32) -> Json raise Refused {
+fn Reader::array(self : Reader, depth : Int32) -> Value raise Refused {
   let at = self.at()
   self.bump()
-  let out : Array[Json] = []
+  let out : Array[Value] = []
   for ;; {
     self.skip()
     if self.eof() {
@@ -440,7 +471,7 @@ fn Reader::array(self : Reader, depth : Int32) -> Json raise Refused {
       raise Unexpected(self.at(), self.printable())
     }
   }
-  Json::array(out)
+  Value::array(out)
 }
 
 ///|
@@ -450,15 +481,18 @@ fn Reader::array(self : Reader, depth : Int32) -> Json raise Refused {
 /// added to it afterwards, which is why it is marked `Inline` rather than `Direct`.
 /// TOML 1.0.0 also keeps it on one line and forbids a trailing comma, both of which
 /// are refused here rather than tolerated.
-fn Reader::inline(self : Reader, depth : Int32) -> Json raise Refused {
+fn Reader::inline(self : Reader, depth : Int32) -> Value raise Refused {
   let at = self.at()
   self.bump()
-  let fields : Map[String, Json] = Map([])
+  let fields : Map[String, Value] = Map([])
   self.gap()
   if self.cur() == 0x7d {
     self.bump()
-    return Json::object(fields)
+    return Value::Table(fields)
   }
+  // What a dotted key in this brace has made, so a later one may extend it — and
+  // one that names a table a value already holds may not.
+  let made : Map[String, Bool] = Map([])
   for ;; {
     self.gap()
     let kat = self.at()
@@ -473,12 +507,19 @@ fn Reader::inline(self : Reader, depth : Int32) -> Json raise Refused {
     let mut table = fields
     for i = 0; i < path.length() - 1; i = i + 1 {
       let name = path[i]
+      let here = path[0:i + 1].to_owned()
       match table.get(name) {
-        Some(Object(inner)) => table = inner
-        Some(_) => raise Redefined(kat, name)
+        Some(Table(inner)) =>
+          if made.get(path_key(here)) is Some(true) {
+            table = inner
+          } else {
+            raise Redefined(kat, join(here))
+          }
+        Some(_) => raise Redefined(kat, join(here))
         None => {
-          let fresh : Map[String, Json] = Map([])
-          table[name] = Json::object(fresh)
+          let fresh : Map[String, Value] = Map([])
+          table[name] = Value::Table(fresh)
+          made[path_key(here)] = true
           table = fresh
         }
       }
@@ -507,12 +548,12 @@ fn Reader::inline(self : Reader, depth : Int32) -> Json raise Refused {
     }
     raise Unexpected(self.at(), self.printable())
   }
-  Json::object(fields)
+  Value::Table(fields)
 }
 
 ///|
 /// A bare value: a boolean, a date-time, or a number.
-fn Reader::scalar(self : Reader) -> Json raise Refused {
+fn Reader::scalar(self : Reader) -> Value raise Refused {
   let at = self.at()
   let start = self.pos
   while !self.eof() {
@@ -538,15 +579,18 @@ fn Reader::scalar(self : Reader) -> Json raise Refused {
     raise Unexpected(at, self.printable())
   }
   match text {
-    "true" => return Json::boolean(true)
-    "false" => return Json::boolean(false)
+    "true" => return Value::boolean(true)
+    "false" => return Value::boolean(false)
     _ => ()
   }
   // A date-time is the one kind TOML gives a type of its own, so it is read as
-  // one and normalised; everything else numeric is a number.
+  // one; everything else bare is a number.
   if dateish(text) {
+    if !moment_ok(text) {
+      raise BadDate(at)
+    }
     let m = @moondate.parse(text[:]) catch { _ => raise BadDate(at) }
-    return Json::string(m.to_string())
+    return Value::Datetime(m)
   }
   number(text, at)
 }
@@ -566,6 +610,129 @@ fn Reader::looks_like_time(self : Reader, from : Int32) -> Bool {
 }
 
 ///|
+/// Whether text is spelled as one of TOML's four date-time forms.
+///
+/// The calendar is the date library's business, but the shape is this module's:
+/// TOML 1.0.0 asks for two digits everywhere, seconds always, and an offset of
+/// `±HH:MM` or `Z`, none of which a general date reader insists on.
+fn moment_ok(s : String) -> Bool {
+  let n = s.length()
+  let digits = fn(from : Int32, count : Int32) -> Bool {
+    if from + count > n {
+      return false
+    }
+    for i = from; i < from + count; i = i + 1 {
+      let c = s[i].to_int()
+      if c < 0x30 || c > 0x39 {
+        return false
+      }
+    }
+    true
+  }
+  let dash = fn(i : Int32) -> Bool { i < n && s[i].to_int() == 0x2d }
+  let colon = fn(i : Int32) -> Bool { i < n && s[i].to_int() == 0x3a }
+  // A time on its own.
+  if colon(2) {
+    if !time_ok(s, 0) {
+      return false
+    }
+    if n == 8 {
+      return true
+    }
+    return fraction_ok(s, 8) && fraction_end(s, 8) == n
+  }
+  if !(digits(0, 4) && dash(4) && digits(5, 2) && dash(7) && digits(8, 2)) {
+    return false
+  }
+  if n == 10 {
+    // A date on its own.
+    return true
+  }
+  if n < 11 {
+    return false
+  }
+  let sep = s[10].to_int()
+  if sep != 0x54 && sep != 0x74 && sep != 0x20 {
+    return false
+  }
+  if !time_ok(s, 11) {
+    return false
+  }
+  let mut end = 19
+  if fraction_ok(s, end) {
+    end = fraction_end(s, end)
+  }
+  if end == n {
+    // A local date-time: no offset.
+    return true
+  }
+  let offset = s[end].to_int()
+  if offset == 0x5a || offset == 0x7a {
+    return end + 1 == n
+  }
+  if offset != 0x2b && offset != 0x2d {
+    return false
+  }
+  // `±HH:MM`.
+  digits(end + 1, 2) && colon(end + 3) && digits(end + 4, 2) && end + 6 == n
+}
+
+///|
+/// Whether `HH:MM:SS` is at `from`.
+fn time_ok(s : String, from : Int32) -> Bool {
+  let n = s.length()
+  let digit = fn(i : Int32) -> Bool {
+    if i >= n {
+      return false
+    }
+    let c = s[i].to_int()
+    c >= 0x30 && c <= 0x39
+  }
+  from + 8 <= n &&
+  digit(from) &&
+  digit(from + 1) &&
+  s[from + 2].to_int() == 0x3a &&
+  digit(from + 3) &&
+  digit(from + 4) &&
+  s[from + 5].to_int() == 0x3a &&
+  digit(from + 6) &&
+  digit(from + 7)
+}
+
+///|
+/// Whether a fractional second starts at `from`.
+fn fraction_ok(s : String, from : Int32) -> Bool {
+  let n = s.length()
+  if from >= n || s[from].to_int() != 0x2e {
+    return false
+  }
+  let mut i = from + 1
+  while i < n {
+    let c = s[i].to_int()
+    if c < 0x30 || c > 0x39 {
+      break
+    }
+    i = i + 1
+  }
+  i > from + 1
+}
+
+///|
+/// Where the fractional second at `from` ends.
+fn fraction_end(s : String, from : Int32) -> Int32 {
+  let n = s.length()
+  let mut i = from + 1
+  while i < n {
+    let c = s[i].to_int()
+    if c < 0x30 || c > 0x39 {
+      break
+    }
+    i = i + 1
+  }
+  i
+}
+
+///|
 /// Whether text looks like one of TOML's four date-time forms rather than a number.
 ///
 /// A date has a dash after four digits; a time has a colon after two. Neither
@@ -579,25 +746,26 @@ fn dateish(s : String) -> Bool {
 
 ///|
 /// A number in any of the four bases TOML writes, or a float.
-fn number(text : String, at : At) -> Json raise Refused {
-  // Underscores group digits and mean nothing else (§Integer).
-  let bare = strip_underscores(text, at)
-  if bare.length() == 0 {
+///
+/// An integer is kept as 64 bits, which is what the format calls it; a float is
+/// the nearest double, and keeps the text it was written as so it can be written
+/// back the way it came.
+fn number(text : String, at : At) -> Value raise Refused {
+  let mut at_sign = 0
+  let mut negative = false
+  if text.length() > 0 {
+    let c = text[0].to_int()
+    if c == 0x2d || c == 0x2b {
+      negative = c == 0x2d
+      at_sign = 1
+    }
+  }
+  let body = text[at_sign:].to_owned()
+  if body.length() == 0 {
     raise BadNumber(at)
   }
-  let (sign, body) = if bare[0].to_int() == 0x2d {
-    (-1.0, bare[1:].to_owned())
-  } else if bare[0].to_int() == 0x2b {
-    (1.0, bare[1:].to_owned())
-  } else {
-    (1.0, bare)
-  }
-  match body {
-    "inf" => return Json::number(sign * @double.infinity)
-    "nan" => return Json::number(@double.not_a_number)
-    _ => ()
-  }
-  if body.length() > 2 && body[0].to_int() == 0x30 {
+  // TOML writes a prefixed integer with no sign.
+  if body.length() >= 2 && body[0].to_int() == 0x30 {
     let radix = match body[1].to_int() {
       0x78 => 16
       0x6f => 8
@@ -605,111 +773,144 @@ fn number(text : String, at : At) -> Json raise Refused {
       _ => 0
     }
     if radix != 0 {
-      let mut acc = 0.0
-      for i = 2; i < body.length(); i = i + 1 {
-        guard nibble(body[i].to_int()) is Some(d) else { raise BadNumber(at) }
-        if d >= radix {
+      if at_sign == 1 {
+        raise BadNumber(at)
+      }
+      let digits = strip_underscores(body[2:].to_owned(), at, radix)
+      if digits.length() == 0 {
+        raise BadNumber(at)
+      }
+      for i = 0; i < digits.length(); i = i + 1 {
+        guard nibble(digits[i].to_int()) is Some(d) && d < radix else {
           raise BadNumber(at)
         }
-        acc = acc * radix.to_double() + d.to_double()
       }
-      // No `repr`: `0xDEADBEEF` is not a JSON number, and the tree this builds
-      // has to stay one.
-      return Json::number(sign * acc)
+      let whole = @string.parse_int64(digits[:], base=radix) catch {
+        _ => raise BadNumber(at)
+      }
+      return Value::Integer(whole)
     }
+  }
+  match body {
+    "inf" =>
+      return Value::Float(
+        Real::new(if negative { -@double.infinity } else { @double.infinity }),
+      )
+    "nan" => return Value::Float(Real::new(@double.not_a_number))
+    _ => ()
+  }
+  let digits = strip_underscores(body, at, 10)
+  if digits.length() == 0 {
+    raise BadNumber(at)
+  }
+  if is_float_text(digits) {
+    if !float_ok(digits) {
+      raise BadNumber(at)
+    }
+    let value = @string.parse_double(digits[:]) catch {
+      // Past the largest double the only honest answer is infinity, which is what
+      // the arithmetic says the value is.
+      _ => @double.infinity
+    }
+    let signed = if negative { -value } else { value }
+    return Value::Float({
+      value: signed,
+      // The text is kept only when JSON spells it the same way, because the tree
+      // `loads` builds has to carry it as a JSON number.
+      repr: if json_number(text) {
+        Some(text)
+      } else {
+        None
+      },
+    })
   }
   // A leading zero is only legal on its own (§Integer), which is what stops
   // `0123` from being read as 123 or as octal.
-  if body.length() > 1 &&
-    body[0].to_int() == 0x30 &&
-    body[1].to_int() >= 0x30 &&
-    body[1].to_int() <= 0x39 {
+  if digits.length() > 1 && digits[0].to_int() == 0x30 {
     raise BadNumber(at)
   }
-  match decimal(body) {
-    // The text is kept when it is itself a JSON number, so a value past what a
-    // Double holds exactly writes back as the digits it was read from. A `+`, an
-    // underscore or another base is not, so those carry no text and are written
-    // from the value.
-    Some(v) =>
-      if json_number(text) {
-        Json::number(sign * v, repr=text)
-      } else {
-        Json::number(sign * v)
-      }
-    None => raise BadNumber(at)
+  for i = 0; i < digits.length(); i = i + 1 {
+    let c = digits[i].to_int()
+    if c < 0x30 || c > 0x39 {
+      raise BadNumber(at)
+    }
   }
+  let spelled = if negative { "-" + digits } else { digits }
+  let whole = @string.parse_int64(spelled[:]) catch { _ => raise BadNumber(at) }
+  Value::Integer(whole)
 }
 
 ///|
-/// A decimal integer or float, with an optional exponent.
-fn decimal(s : String) -> Double? {
+/// Whether a run of digits, sign aside, is written as a float.
+fn is_float_text(s : String) -> Bool {
+  for i = 0; i < s.length(); i = i + 1 {
+    let c = s[i].to_int()
+    if c == 0x2e || c == 0x65 || c == 0x45 {
+      return true
+    }
+  }
+  false
+}
+
+///|
+/// Whether a float is spelled the way TOML spells one: digits either side of the
+/// dot, an exponent with digits, no leading zero on the integer part.
+fn float_ok(s : String) -> Bool {
+  let n = s.length()
+  let digit = fn(i : Int32) -> Bool {
+    if i >= n {
+      return false
+    }
+    let c = s[i].to_int()
+    c >= 0x30 && c <= 0x39
+  }
   let mut i = 0
-  let mut whole = 0.0
-  let mut digits = false
-  while i < s.length() && s[i].to_int() >= 0x30 && s[i].to_int() <= 0x39 {
-    whole = whole * 10.0 + (s[i].to_int() - 0x30).to_double()
-    digits = true
+  while digit(i) {
     i = i + 1
   }
-  let mut value = whole
-  if i < s.length() && s[i].to_int() == 0x2e {
+  if i == 0 {
+    return false
+  }
+  if i > 1 && s[0].to_int() == 0x30 {
+    return false
+  }
+  if i < n && s[i].to_int() == 0x2e {
     i = i + 1
-    let mut frac = 0.0
-    let mut scale = 1.0
-    let mut any = false
-    while i < s.length() && s[i].to_int() >= 0x30 && s[i].to_int() <= 0x39 {
-      frac = frac * 10.0 + (s[i].to_int() - 0x30).to_double()
-      scale = scale * 10.0
-      any = true
+    let from = i
+    while digit(i) {
       i = i + 1
     }
-    // TOML requires a digit either side of the dot.
-    if !any || !digits {
-      return None
+    if i == from {
+      return false
     }
-    value = value + frac / scale
   }
-  if !digits {
-    return None
-  }
-  if i < s.length() && (s[i].to_int() == 0x65 || s[i].to_int() == 0x45) {
+  if i < n && (s[i].to_int() == 0x65 || s[i].to_int() == 0x45) {
     i = i + 1
-    let mut esign = 1
-    if i < s.length() && (s[i].to_int() == 0x2b || s[i].to_int() == 0x2d) {
-      if s[i].to_int() == 0x2d {
-        esign = -1
-      }
+    if i < n && (s[i].to_int() == 0x2b || s[i].to_int() == 0x2d) {
       i = i + 1
     }
-    let mut exp = 0
-    let mut any = false
-    while i < s.length() && s[i].to_int() >= 0x30 && s[i].to_int() <= 0x39 {
-      exp = exp * 10 + (s[i].to_int() - 0x30)
-      any = true
+    let from = i
+    while digit(i) {
       i = i + 1
     }
-    if !any {
-      return None
+    if i == from {
+      return false
     }
-    let mut factor = 1.0
-    for k = 0; k < exp; k = k + 1 {
-      factor = factor * 10.0
-    }
-    value = if esign < 0 { value / factor } else { value * factor }
   }
-  if i != s.length() {
-    return None
-  }
-  Some(value)
+  i == n
 }
 
 ///|
 /// The text with its digit-grouping underscores removed.
 ///
-/// An underscore must sit between two digits, so a leading, trailing or doubled one
-/// is a fault rather than decoration.
-fn strip_underscores(s : String, at : At) -> String raise Refused {
+/// An underscore groups digits of one base and means nothing else, so one that is
+/// not between two digits of that base — leading, trailing, doubled, or next to a
+/// dot or an exponent — is a fault rather than decoration.
+fn strip_underscores(
+  s : String,
+  at : At,
+  radix : Int32,
+) -> String raise Refused {
   if index_of(s, 0x5f) < 0 {
     return s
   }
@@ -722,18 +923,14 @@ fn strip_underscores(s : String, at : At) -> String raise Refused {
     if i == 0 || i + 1 >= s.length() {
       raise BadNumber(at)
     }
-    if !is_alnum(s[i - 1].to_int()) || !is_alnum(s[i + 1].to_int()) {
+    guard nibble(s[i - 1].to_int()) is Some(before) && before < radix else {
+      raise BadNumber(at)
+    }
+    guard nibble(s[i + 1].to_int()) is Some(after) && after < radix else {
       raise BadNumber(at)
     }
   }
   out.to_string()
-}
-
-///|
-fn is_alnum(c : Int32) -> Bool {
-  (c >= 0x30 && c <= 0x39) ||
-  (c >= 0x41 && c <= 0x46) ||
-  (c >= 0x61 && c <= 0x66)
 }
 
 ///|
@@ -871,10 +1068,6 @@ fn Reader::multiline_basic(self : Reader) -> String raise Refused {
       self.escape(out)
       continue
     }
-    if self.cur() == 0x0d {
-      self.bump()
-      continue
-    }
     out.write_char(self.src[self.pos].unsafe_to_char())
     self.bump()
   }
@@ -911,10 +1104,6 @@ fn Reader::multiline_literal(self : Reader) -> String raise Refused {
       }
       break
     }
-    if self.cur() == 0x0d {
-      self.bump()
-      continue
-    }
     out.write_char(self.src[self.pos].unsafe_to_char())
     self.bump()
   }
@@ -949,23 +1138,25 @@ fn Reader::hex(
   n : Int32,
   at : At,
 ) -> Unit raise Refused {
-  let mut v = 0
+  // Eight hex digits do not fit in 32 bits, and `\UFFFFFFFF` is a fault rather
+  // than a code point, so the value is gathered wide and checked before it is one.
+  let mut v : Int64 = 0
   for i = 0; i < n; i = i + 1 {
     guard nibble(self.cur()) is Some(d) else { raise BadEscape(at) }
-    v = (v << 4) | d
+    v = (v << 4) | d.to_int64()
     self.bump()
   }
   if v > 0x10ffff || (v >= 0xd800 && v <= 0xdfff) {
     raise BadEscape(at)
   }
-  out.write_char(v.unsafe_to_char())
+  out.write_char(v.to_int().unsafe_to_char())
 }
 
 ///|
 /// Whether `s` is spelled the way JSON spells a number (RFC 8259 §6).
 ///
 /// TOML writes several that JSON does not — a leading `+`, underscores between
-/// digits, hexadecimal, `inf` — and the tree this module builds is a JSON tree, so
+/// digits, hexadecimal, `inf` — and the tree `loads` builds is a JSON tree, so
 /// only a spelling JSON shares may be carried through as text.
 fn json_number(s : String) -> Bool {
   let mut i = 0
@@ -1007,4 +1198,35 @@ fn json_number(s : String) -> Bool {
     }
   }
   i == s.length()
+}
+
+///|
+/// Refuse a byte that TOML has no place for before anything is read.
+///
+/// A control character other than tab, line feed and carriage return is not text
+/// (§String), and a carriage return is only a line break as half of a CRLF. Taking
+/// the pass over the whole document first keeps every reader from repeating it.
+fn check_text(src : StringView) -> Unit raise Refused {
+  let mut line = 1
+  let mut bol = 0
+  for i = 0; i < src.length(); i = i + 1 {
+    let c = src[i].to_int()
+    if c == 0x0a {
+      line = line + 1
+      bol = i + 1
+      continue
+    }
+    if c == 0x09 || c == 0x0d {
+      if c == 0x0d && (i + 1 >= src.length() || src[i + 1].to_int() != 0x0a) {
+        raise Unexpected({ at: i, line, column: i - bol + 1, }, '\r')
+      }
+      continue
+    }
+    if c < 0x20 || c == 0x7f {
+      raise Unexpected(
+        { at: i, line, column: i - bol + 1, },
+        c.unsafe_to_char(),
+      )
+    }
+  }
 }
