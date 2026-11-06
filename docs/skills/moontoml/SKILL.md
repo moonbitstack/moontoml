@@ -1,6 +1,6 @@
 ---
 name: moontoml
-description: TOML 1.0.0 for MoonBit — read a document and write it back, either as a Json tree or kind for kind. Use when a task reads or writes a TOML file: a moon.mod, a config for a service, a file a person edits by hand. Covers both readings, the four date-time kinds, 64-bit integers, and the error that says which line is wrong.
+description: "TOML 1.0.0 for MoonBit — read a document and write it back, either as a Json tree or kind for kind. Use when a task reads or writes a TOML file: a moon.mod, a config for a service, a file a person edits by hand. Covers both readings, the four date-time kinds, 64-bit integers, and the error that says which line is wrong."
 ---
 
 # moontoml
