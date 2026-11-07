@@ -9,13 +9,17 @@ import {
 // Values
 pub fn accepted() -> Array[Accepted]
 
-pub fn decode_document(Bytes) -> String
+pub fn accepted_11() -> Array[Accepted]
+
+pub fn decode_document(Bytes, Int32) -> String
 
 pub fn encode_document(Bytes) -> String
 
 pub fn of_typed(@json.Json) -> @moontoml.Value raise
 
 pub fn rejected() -> Array[Rejected]
+
+pub fn rejected_11() -> Array[Rejected]
 
 pub fn typed(@moontoml.Value) -> @json.Json
 

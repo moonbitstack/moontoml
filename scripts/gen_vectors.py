@@ -23,7 +23,10 @@ import urllib.request
 PIN = "v2.2.0"
 DIGEST = "fdab2779b3902eb08030f389a5d53e95c5b49404149ac6f2eda5227a5363c232"
 ARCHIVE = f"https://codeload.github.com/toml-lang/toml-test/tar.gz/refs/tags/{PIN}"
-LIST = "tests/files-toml-1.0.0"
+LISTS = {
+    "": "tests/files-toml-1.0.0",
+    "_11": "tests/files-toml-1.1.0",
+}
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "src" / "conformance"
@@ -53,8 +56,12 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def corpus():
-    """The 1.0.0 file list and the files it names, keyed by path under `tests/`."""
+def corpora():
+    """Each edition's file list and the files it names, keyed by path under `tests/`.
+
+    The keys are the suffix the generated files carry: ``""`` for 1.0.0 and
+    ``"_11"`` for 1.1.0, which is the edition that list was cut for.
+    """
     with tarfile.open(fileobj=io.BytesIO(fetch())) as tar:
         root = tar.getnames()[0].split("/")[0]
         files = {}
@@ -63,8 +70,11 @@ def corpus():
                 continue
             name = member.name[len(root) + 1 :]
             files[name] = tar.extractfile(member).read()
-    names = files[LIST].decode().split()
-    return {name: files["tests/" + name] for name in names}
+    out = {}
+    for suffix, list_path in LISTS.items():
+        names = files[list_path].decode().split()
+        out[suffix] = {name: files["tests/" + name] for name in names}
+    return out
 
 
 def text(value):
@@ -109,7 +119,7 @@ def chunk(items, size):
     return [items[i : i + size] for i in range(0, len(items), size)]
 
 
-def accepted(files):
+def accepted(files, suffix):
     cases = [
         (name, files[name], files[name[:-5] + ".json"])
         for name in sorted(files)
@@ -118,9 +128,9 @@ def accepted(files):
     body = [HEADER.format(pin=PIN)]
     names = []
     for number, part in enumerate(chunk(cases, 20)):
-        names.append(f"accepted_{number:02d}")
+        names.append(f"accepted{suffix}_{number:02d}")
         body.append("///|")
-        body.append(f"fn accepted_{number:02d}() -> Array[Accepted] {{")
+        body.append(f"fn accepted{suffix}_{number:02d}() -> Array[Accepted] {{")
         body.append("  [")
         for name, src, want in part:
             body.append("    {")
@@ -132,7 +142,7 @@ def accepted(files):
         body.append("}")
         body.append("")
     body.append("///|")
-    body.append("pub fn accepted() -> Array[Accepted] {")
+    body.append(f"pub fn accepted{suffix}() -> Array[Accepted] {{")
     body.append("  let all : Array[Accepted] = []")
     for name in names:
         body.append(f"  all.append({name}())")
@@ -142,7 +152,7 @@ def accepted(files):
     return "\n".join(body)
 
 
-def rejected(files):
+def rejected(files, suffix):
     cases = [
         (name, files[name])
         for name in sorted(files)
@@ -151,9 +161,9 @@ def rejected(files):
     body = [HEADER.format(pin=PIN)]
     names = []
     for number, part in enumerate(chunk(cases, 50)):
-        names.append(f"rejected_{number:02d}")
+        names.append(f"rejected{suffix}_{number:02d}")
         body.append("///|")
-        body.append(f"fn rejected_{number:02d}() -> Array[Rejected] {{")
+        body.append(f"fn rejected{suffix}_{number:02d}() -> Array[Rejected] {{")
         body.append("  [")
         for name, src in part:
             body.append("    {")
@@ -164,7 +174,7 @@ def rejected(files):
         body.append("}")
         body.append("")
     body.append("///|")
-    body.append("pub fn rejected() -> Array[Rejected] {")
+    body.append(f"pub fn rejected{suffix}() -> Array[Rejected] {{")
     body.append("  let all : Array[Rejected] = []")
     for name in names:
         body.append(f"  all.append({name}())")
@@ -175,11 +185,11 @@ def rejected(files):
 
 
 def main():
-    files = corpus()
-    written = {
-        "vectors_accepted.mbt": accepted(files),
-        "vectors_rejected.mbt": rejected(files),
-    }
+    per_edition = corpora()
+    written = {}
+    for suffix, files in per_edition.items():
+        written[f"vectors_accepted{suffix}.mbt"] = accepted(files, suffix)
+        written[f"vectors_rejected{suffix}.mbt"] = rejected(files, suffix)
     for name, content in written.items():
         (OUT / name).write_bytes(content.encode("utf-8"))
         print(f"wrote src/conformance/{name}")
