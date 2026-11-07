@@ -253,11 +253,12 @@ it lists — 1.0.0 and 1.1.0 — over every file each edition names:
 | valid, read into the `Doc` and written back byte for byte | 1.1.0 | 214 | 214 |
 
 Nothing is skipped, and no case is expected to fail. The 0.4 and 0.5 editions have no `toml-test`
-file list of their own, so they are checked against the edition they grow from — every document
-1.0.0 refuses of a 0.5, and every document 0.5 refuses of a 0.4 — plus the feature set each
-introduced. The corpus is generated into the test sources by `scripts/gen_vectors.py`, which pins
-the release and checks its digest, so the numbers above are the ones the tests assert on every
-backend.
+file list of their own, so they are checked feature by feature against the edition they grow from:
+every thing 0.5 introduced — a dotted key, a prefixed integer, `inf` or `nan`, a local date-time
+— is refused of a 0.4 and read in full at a 0.5, and what 0.4 already allowed reads the same in
+both. That is the `editions_wbtest` in the conformance package. The corpus is generated into the
+test sources by `scripts/gen_vectors.py`, which pins the release and checks its digest, so the
+numbers above are the ones the tests assert on every backend.
 
 ## Examples
 
