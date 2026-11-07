@@ -78,6 +78,12 @@ jobs:
           "$PY" scripts/gen_api.py
           git diff --exit-code docs/api.html
 
+      # Every MoonBit block in the README and the skill has to compile as written.
+      - name: the code in the docs compiles
+        if: runner.os == 'Linux'
+        run: |
+          python3 scripts/check_snippets.py
+
       # The corpus the conformance tests read is generated, so it has to match the
       # script that writes it. Only Linux needs the download, and only once.
       - name: conformance vectors are up to date
@@ -92,8 +98,9 @@ jobs:
           node-version: lts/*
 
       # The official suite, run the way its authors meant it to be run: the tool
-      # drives the library as a decoder and as an encoder, document by document.
-      - name: toml-test (both directions)
+      # drives the library as a decoder and as an encoder, document by document,
+      # at each edition the suite lists.
+      - name: toml-test (both editions, both directions)
         if: runner.os == 'Linux'
         run: |
           mkdir -p "$RUNNER_TEMP/toml-test"
@@ -103,5 +110,8 @@ jobs:
           chmod +x "$RUNNER_TEMP/toml-test/toml-test"
           moon build --target js --release src/conformance
           "$RUNNER_TEMP/toml-test/toml-test" test -toml 1.0.0 -color never \
-            -decoder "node scripts/toml_test_driver.mjs decode" \
+            -decoder "node scripts/toml_test_driver.mjs decode 10" \
+            -encoder "node scripts/toml_test_driver.mjs encode"
+          "$RUNNER_TEMP/toml-test/toml-test" test -toml 1.1.0 -color never \
+            -decoder "node scripts/toml_test_driver.mjs decode 11" \
             -encoder "node scripts/toml_test_driver.mjs encode"
