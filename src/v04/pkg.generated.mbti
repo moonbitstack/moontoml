@@ -1,0 +1,49 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "moonbitstack/moontoml/v04"
+
+import {
+  "moonbitlang/core/json",
+  "moonbitstack/moontoml",
+}
+
+// Values
+pub fn decode(StringView) -> @moontoml.Value raise @moontoml.Refused
+
+pub fn decode_bytes(BytesView, bom? : Bool) -> @moontoml.Value raise @moontoml.Refused
+
+pub fn decode_doc(StringView) -> @moontoml.Doc raise @moontoml.Refused
+
+pub fn dump(@json.Json, sort? : Bool) -> Bytes
+
+pub fn dumps(@json.Json, sort? : Bool) -> String
+
+pub let edition : @moontoml.Edition
+
+pub fn encode(@moontoml.Value, sort? : Bool) -> String
+
+pub fn encode_bytes(@moontoml.Value, sort? : Bool) -> Bytes
+
+pub fn load(BytesView, bom? : Bool) -> @json.Json raise @moontoml.Refused
+
+pub fn loads(StringView) -> @json.Json raise @moontoml.Refused
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+pub using @moontoml {type At}
+
+pub using @moontoml {type Doc}
+
+pub using @moontoml {type Edition}
+
+pub using @moontoml {type Flavor}
+
+pub using @moontoml {type Real}
+
+pub using @moontoml {type Refused}
+
+pub using @moontoml {type Value}
+
+// Traits

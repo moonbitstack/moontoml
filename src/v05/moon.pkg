@@ -1,0 +1,6 @@
+// TOML 0.5, https://toml.io/en/v0.5 — the same reading, at the 0.5 edition:
+// dotted keys, hex/octal/binary integers, inf and nan, and the three local
+// date-time kinds.
+import {
+  "moonbitstack/moontoml",
+}

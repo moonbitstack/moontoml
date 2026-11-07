@@ -39,6 +39,7 @@ pub(all) suberror Refused {
   BadNumber(At)
   BadDate(At)
   Redefined(At, String)
+  MixedArray(At)
   Trailing(At)
   TooDeep(At)
   BadUtf8(At)
@@ -54,6 +55,8 @@ pub impl Show for Refused with fn output(self, logger) {
     BadNumber(at) => logger.write_string("\{at}: not a number")
     BadDate(at) => logger.write_string("\{at}: not a date or time")
     Redefined(at, k) => logger.write_string("\{at}: \{k} is already defined")
+    MixedArray(at) =>
+      logger.write_string("\{at}: an array is one kind before 1.0")
     Trailing(at) => logger.write_string("\{at}: trailing content")
     TooDeep(at) => logger.write_string("\{at}: nested too deep")
     BadUtf8(at) => logger.write_string("\{at}: not UTF-8")
@@ -73,7 +76,7 @@ pub extend Refused with Eq::{not_equal, equal}
 /// Where the refusal happened.
 ///
 /// Every variant carries a position, so a caller reporting a line does not have to
-/// match all nine of them to get at it.
+/// match all ten of them to get at it.
 pub fn Refused::at(self : Refused) -> At {
   match self {
     Unexpected(at, _)
@@ -82,6 +85,7 @@ pub fn Refused::at(self : Refused) -> At {
     | BadNumber(at)
     | BadDate(at)
     | Redefined(at, _)
+    | MixedArray(at)
     | Trailing(at)
     | TooDeep(at)
     | BadUtf8(at) => at
@@ -89,10 +93,33 @@ pub fn Refused::at(self : Refused) -> At {
 }
 
 ///|
+/// Which edition of the format a document is read under.
+///
+/// The editions differ by real grammar: `v04` has no dotted keys, no
+/// hex/octal/binary integers and no `inf`/`nan`; `v05` adds those plus the three
+/// local date-time kinds; `v100` is the current strict reading, and `v110` relaxes
+/// inline tables to span lines with a trailing comma, adds the `\x` and `\e`
+/// escapes and lets a time drop its seconds.
+#derive(Eq, Debug)
+pub(all) enum Edition {
+  V04
+  V05
+  V100
+  V110
+}
+
+///|
+pub extend Edition with Debug::{to_repr}
+
+///|
+pub extend Edition with Eq::{not_equal, equal}
+
+///|
 /// How a document is read.
 ///
-/// The preset is `strict`. Build another with `Flavor::new`, or update one in
-/// place with `{ ..strict, depth: 64 }`.
+/// The preset is `strict`: TOML 1.0.0 and a nesting limit of 500. Build another
+/// with `Flavor::new`, or update one in place with `{ ..strict, depth: 64 }`. The
+/// version-specific presets live in the `v04`, `v05` and `v110` packages.
 ///
 /// There is no knob for a repeated key. TOML 1.0.0 §1 makes redefinition an error,
 /// not a policy, so making it configurable would be offering to read a document the
@@ -100,6 +127,7 @@ pub fn Refused::at(self : Refused) -> At {
 #derive(Eq, Debug)
 pub(all) struct Flavor {
   depth : Int32
+  edition : Edition
 }
 
 ///|
@@ -116,13 +144,14 @@ pub extend Flavor with Eq::{not_equal, equal}
 pub let depth : Int32 = 500
 
 ///|
-/// The preset.
-pub let strict : Flavor = { depth, }
+/// The preset: TOML 1.0.0 at the preset depth. The `v04`, `v05` and `v110`
+/// packages each fix a different edition and expose the same entry points.
+pub let strict : Flavor = { depth, edition: V100, }
 
 ///|
 /// A flavor by name, every knob with the preset's value.
-pub fn Flavor::new(depth~ : Int32 = depth) -> Flavor {
-  { depth, }
+pub fn Flavor::new(depth~ : Int32 = depth, edition~ : Edition = V100) -> Flavor {
+  { depth, edition, }
 }
 
 ///|
@@ -137,6 +166,20 @@ pub fn decode(
 ) -> Value raise Refused {
   check_text(src)
   Reader::new(src, flavor).document()
+}
+
+///|
+/// The document in `src`, kept as it was written.
+///
+/// This is the reading for a file a person edits: change a value in place and write
+/// the result back, and the rest of the document — the comments, the blank lines,
+/// the order, the spelling of every value but the one that moved — is the source
+/// byte for byte. See `Doc`.
+pub fn decode_doc(
+  src : StringView,
+  flavor~ : Flavor = strict,
+) -> Doc raise Refused {
+  Doc::decode(src, flavor~)
 }
 
 ///|

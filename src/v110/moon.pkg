@@ -1,0 +1,6 @@
+// TOML 1.1, https://toml.io/en/v1.1.0 — the same reading, at the 1.1 edition:
+// inline tables that span lines and end with a comma, the \x and \e escapes,
+// and a time that may drop its seconds.
+import {
+  "moonbitstack/moontoml",
+}

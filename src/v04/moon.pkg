@@ -1,0 +1,6 @@
+// TOML 0.4, https://toml.io/en/v0.4 — the same reading, at the 0.4 edition:
+// no dotted keys, no hex/octal/binary integers, no inf or nan, and only the
+// offset date-time.
+import {
+  "moonbitstack/moontoml",
+}

@@ -17,6 +17,148 @@ priv enum Kind {
 }
 
 ///|
+/// The kind of thing an item of a document is.
+#derive(Debug)
+pub(all) enum ItemKind {
+  Header
+  Pair
+}
+
+///|
+pub extend ItemKind with Debug::{to_repr}
+
+///|
+/// One thing a document holds, in the order it was read: a table header or a
+/// key-value pair.
+///
+/// The four offsets say where the line and, for a pair, its value sat in the
+/// source. The document tiles exactly as the run of its items and the text
+/// between them, so writing it back over the source is the original byte for byte
+/// unless a pair's value has moved, in which case only that value is written fresh
+/// and the key, the separator and any trailing comment are kept as they were.
+#derive(Debug)
+pub(all) struct Item {
+  kind : ItemKind
+  // The key's full path from the root, including the table a header opens.
+  path : Array[String]
+  // Where the line began.
+  start : Int32
+  // For a pair, where its value began and where it ended.
+  vstart : Int32
+  vend : Int32
+  // Where the line ended — before its trailing line break.
+  end : Int32
+  // Whether the value has been changed since the document was read.
+  mut changed : Bool
+}
+
+///|
+pub extend Item with Debug::{to_repr}
+
+///|
+/// A header item, which holds no value of its own.
+fn Item::header(path : Array[String], start : Int32, end : Int32) -> Item {
+  { kind: Header, path, start, vstart: 0, vend: 0, end, changed: false, }
+}
+
+///|
+/// A pair item, whose value ran from `vstart` to `vend`.
+fn Item::pair(
+  path : Array[String],
+  start : Int32,
+  vstart : Int32,
+  vend : Int32,
+  end : Int32,
+) -> Item {
+  { kind: Pair, path, start, vstart, vend, end, changed: false, }
+}
+
+///|
+/// The grammar an edition admits, as the gates the reader checks against.
+///
+/// The editions grow the format by real features, and a document that uses one
+/// before it exists is refused: `v04` has no dotted keys, no hex/octal/binary
+/// integers, no `inf`/`nan` and only the offset date-time; `v05` adds those four;
+/// `v100` allows a mixed-type array; and `v110` relaxes an inline table to span
+/// lines with a trailing comma, adds the `\x` and `\e` escapes and lets a time
+/// drop its seconds.
+priv struct Caps {
+  // A key may carry more than one segment.
+  dotted : Bool
+  // An integer may carry a 0x, 0o or 0b prefix.
+  prefixed : Bool
+  // A float may be `inf` or `nan`.
+  inf_nan : Bool
+  // A date-time may be local — a bare date, a bare time, or a date-time with no
+  // offset — rather than only the offset form that 0.4 knows.
+  local_dt : Bool
+  // An array may hold values of more than one kind.
+  mixed : Bool
+  // An inline table may span lines and end with a comma.
+  multi_inline : Bool
+  // A basic string may use the \x escape for the first 255 code points.
+  x_esc : Bool
+  // A basic string may use the \e escape.
+  e_esc : Bool
+  // A time may drop its seconds.
+  opt_secs : Bool
+}
+
+///|
+fn caps_of(edition : Edition) -> Caps {
+  match edition {
+    V04 =>
+      {
+        dotted: false,
+        prefixed: false,
+        inf_nan: false,
+        local_dt: false,
+        mixed: false,
+        multi_inline: false,
+        x_esc: false,
+        e_esc: false,
+        opt_secs: false,
+      }
+    V05 =>
+      {
+        dotted: true,
+        prefixed: true,
+        inf_nan: true,
+        local_dt: true,
+        mixed: false,
+        multi_inline: false,
+        x_esc: false,
+        e_esc: false,
+        opt_secs: false,
+      }
+    V100 =>
+      {
+        dotted: true,
+        prefixed: true,
+        inf_nan: true,
+        local_dt: true,
+        mixed: true,
+        multi_inline: false,
+        x_esc: false,
+        e_esc: false,
+        opt_secs: false,
+      }
+    V110 =>
+      {
+        dotted: true,
+        prefixed: true,
+        inf_nan: true,
+        local_dt: true,
+        mixed: true,
+        multi_inline: true,
+        x_esc: true,
+        e_esc: true,
+        opt_secs: true,
+      }
+  }
+}
+
+///|
 /// Where the reader is and what it has built.
 priv struct Reader {
   src : StringView
@@ -24,12 +166,18 @@ priv struct Reader {
   mut line : Int32
   mut bol : Int32
   flavor : Flavor
+  caps : Caps
   root : Map[String, Value]
   // The table that bare keys land in, and the path its header named.
   mut here : Map[String, Value]
   mut prefix : Array[String]
   // How each dotted path came to exist.
   seen : Map[String, Kind]
+  // When the document is also kept as a `Document`, each item is recorded with the
+  // exact span it occupied; writing the items back over the source reproduces it
+  // byte for byte, and only a replaced value is written fresh.
+  mut recording : Bool
+  rec_items : Array[Item]
 }
 
 ///|
@@ -41,10 +189,13 @@ fn Reader::new(src : StringView, flavor : Flavor) -> Reader {
     line: 1,
     bol: 0,
     flavor,
+    caps: caps_of(flavor.edition),
     root,
     here: root,
     prefix: [],
     seen: Map([]),
+    recording: false,
+    rec_items: [],
   }
 }
 
@@ -144,6 +295,19 @@ fn Reader::printable(self : Reader) -> Char {
   }
 }
 
+///|
+/// The key's full path from the root, which is what a pair lands in.
+fn Reader::full_path(self : Reader, path : Array[String]) -> Array[String] {
+  let out : Array[String] = []
+  for name in self.prefix {
+    out.push(name)
+  }
+  for name in path {
+    out.push(name)
+  }
+  out
+}
+
 // -- the document -------------------------------------------------------------
 
 ///|
@@ -167,6 +331,7 @@ fn Reader::document(self : Reader) -> Value raise Refused {
 /// A `[table]` or `[[array of tables]]` header (§Table, §Array of Tables).
 fn Reader::header(self : Reader) -> Unit raise Refused {
   let at = self.at()
+  let start = self.pos
   self.bump()
   let array = self.cur() == 0x5b
   if array {
@@ -184,7 +349,11 @@ fn Reader::header(self : Reader) -> Unit raise Refused {
     }
     self.bump()
   }
+  let end = self.pos
   self.end_of_line()
+  if self.recording {
+    self.rec_items.push(Item::header(self.full_path(path), start, end))
+  }
   self.here = if array {
     self.open_tables(path, at)
   } else {
@@ -300,6 +469,7 @@ fn Reader::walk(
 /// One `key = value` line, where the key may be dotted.
 fn Reader::pair(self : Reader) -> Unit raise Refused {
   let at = self.at()
+  let start = self.pos
   let path = self.path()
   self.gap()
   if self.cur() != 0x3d {
@@ -307,8 +477,16 @@ fn Reader::pair(self : Reader) -> Unit raise Refused {
   }
   self.bump()
   self.gap()
+  let vstart = self.pos
   let value = self.value(0)
+  let vend = self.pos
   self.end_of_line()
+  let end = self.pos
+  if self.recording {
+    self.rec_items.push(
+      Item::pair(self.full_path(path), start, vstart, vend, end),
+    )
+  }
   // A dotted key walks into tables under the current one; the last segment is the
   // key itself.
   let mut table = self.here
@@ -356,6 +534,11 @@ fn Reader::path(self : Reader) -> Array[String] raise Refused {
     out.push(self.key())
     self.gap()
     if self.cur() == 0x2e {
+      // A dot between two segments is the dotted key; before 0.5 a key is one
+      // segment, and a dot inside a quoted key is part of that key, not a dot here.
+      if !self.caps.dotted {
+        raise Unexpected(self.at(), self.printable())
+      }
       self.bump()
       continue
     }
@@ -450,10 +633,15 @@ fn Reader::value(self : Reader, depth : Int32) -> Value raise Refused {
 
 ///|
 /// An array, which may span lines and may end with a comma (§Array).
+///
+/// 1.0.0 allows an array of mixed kinds; before that an array holds values of one
+/// kind only, and a second kind is a fault.
 fn Reader::array(self : Reader, depth : Int32) -> Value raise Refused {
   let at = self.at()
   self.bump()
   let out : Array[Value] = []
+  // The kind the first element was, which the rest must match until 1.0.
+  let mut first : Int32? = None
   for ;; {
     self.skip()
     if self.eof() {
@@ -463,7 +651,15 @@ fn Reader::array(self : Reader, depth : Int32) -> Value raise Refused {
       self.bump()
       break
     }
-    out.push(self.value(depth + 1))
+    let held = self.value(depth + 1)
+    match first {
+      None => first = Some(kind_of(held))
+      Some(kind) =>
+        if !self.caps.mixed && kind_of(held) != kind {
+          raise MixedArray(self.at())
+        }
+    }
+    out.push(held)
     self.skip()
     if self.cur() == 0x2c {
       self.bump()
@@ -475,17 +671,37 @@ fn Reader::array(self : Reader, depth : Int32) -> Value raise Refused {
 }
 
 ///|
+/// The kind a value is, as a number the array gate compares: an array is mixed
+/// the moment two elements differ.
+fn kind_of(value : Value) -> Int32 {
+  match value {
+    String(_) => 0
+    Integer(_) => 1
+    Float(_) => 2
+    Boolean(_) => 3
+    Datetime(_) => 4
+    Array(_) => 5
+    Table(_) => 6
+  }
+}
+
+///|
 /// An inline table (§Inline Table).
 ///
 /// It is closed the moment its brace closes: §Inline Table says a key may not be
 /// added to it afterwards, which is why it is marked `Inline` rather than `Direct`.
-/// TOML 1.0.0 also keeps it on one line and forbids a trailing comma, both of which
-/// are refused here rather than tolerated.
+/// 1.0.0 keeps it on one line and forbids a trailing comma, both refused here; 1.1
+/// lets it span lines, carry comments and end with a comma.
 fn Reader::inline(self : Reader, depth : Int32) -> Value raise Refused {
   let at = self.at()
+  let ml = self.caps.multi_inline
   self.bump()
   let fields : Map[String, Value] = Map([])
-  self.gap()
+  if ml {
+    self.skip()
+  } else {
+    self.gap()
+  }
   if self.cur() == 0x7d {
     self.bump()
     return Value::Table(fields)
@@ -494,7 +710,11 @@ fn Reader::inline(self : Reader, depth : Int32) -> Value raise Refused {
   // one that names a table a value already holds may not.
   let made : Map[String, Bool] = Map([])
   for ;; {
-    self.gap()
+    if ml {
+      self.skip()
+    } else {
+      self.gap()
+    }
     let kat = self.at()
     let path = self.path()
     self.gap()
@@ -529,15 +749,29 @@ fn Reader::inline(self : Reader, depth : Int32) -> Value raise Refused {
       raise Redefined(kat, name)
     }
     table[name] = value
-    self.gap()
+    if ml {
+      self.skip()
+    } else {
+      self.gap()
+    }
     if self.cur() == 0x2c {
       self.bump()
-      self.gap()
-      // A trailing comma is not allowed in 1.0.0.
-      if self.cur() == 0x7d {
-        raise Unexpected(self.at(), '}')
+      if ml {
+        // A trailing comma before the closing brace is allowed from 1.1.
+        self.skip()
+        if self.cur() == 0x7d {
+          self.bump()
+          break
+        }
+        continue
+      } else {
+        self.gap()
+        // A trailing comma is not allowed in 1.0.0.
+        if self.cur() == 0x7d {
+          raise Unexpected(self.at(), '}')
+        }
+        continue
       }
-      continue
     }
     if self.cur() == 0x7d {
       self.bump()
@@ -545,6 +779,10 @@ fn Reader::inline(self : Reader, depth : Int32) -> Value raise Refused {
     }
     if self.eof() {
       raise Truncated(at)
+    }
+    if ml {
+      // A key, not a comma, where a comma or a brace is owed.
+      raise Unexpected(self.at(), self.printable())
     }
     raise Unexpected(self.at(), self.printable())
   }
@@ -586,13 +824,13 @@ fn Reader::scalar(self : Reader) -> Value raise Refused {
   // A date-time is the one kind TOML gives a type of its own, so it is read as
   // one; everything else bare is a number.
   if dateish(text) {
-    if !moment_ok(text) {
+    if !moment_ok(text, self.caps) {
       raise BadDate(at)
     }
     let m = @moondate.parse(text[:]) catch { _ => raise BadDate(at) }
     return Value::Datetime(m)
   }
-  number(text, at)
+  number(text, at, self.caps)
 }
 
 ///|
@@ -610,12 +848,13 @@ fn Reader::looks_like_time(self : Reader, from : Int32) -> Bool {
 }
 
 ///|
-/// Whether text is spelled as one of TOML's four date-time forms.
+/// Whether text is spelled as one of the date-time forms the edition allows.
 ///
-/// The calendar is the date library's business, but the shape is this module's:
-/// TOML 1.0.0 asks for two digits everywhere, seconds always, and an offset of
-/// `±HH:MM` or `Z`, none of which a general date reader insists on.
-fn moment_ok(s : String) -> Bool {
+/// The calendar is the date library's business, but the shape is this module's,
+/// and it changes with the edition: 0.4 knows only the offset date-time, 0.5 adds
+/// the three local kinds and always asks for seconds, and 1.1 lets a time drop its
+/// seconds.
+fn moment_ok(s : String, caps : Caps) -> Bool {
   let n = s.length()
   let digits = fn(from : Int32, count : Int32) -> Bool {
     if from + count > n {
@@ -631,22 +870,29 @@ fn moment_ok(s : String) -> Bool {
   }
   let dash = fn(i : Int32) -> Bool { i < n && s[i].to_int() == 0x2d }
   let colon = fn(i : Int32) -> Bool { i < n && s[i].to_int() == 0x3a }
-  // A time on its own.
+  // A time on its own, which exists only from 0.5.
   if colon(2) {
-    if !time_ok(s, 0) {
+    if !caps.local_dt {
       return false
     }
-    if n == 8 {
+    let end = time_len(s, 0, caps.opt_secs)
+    if end < 0 {
+      return false
+    }
+    if end == n {
       return true
     }
-    return fraction_ok(s, 8) && fraction_end(s, 8) == n
+    // A fractional second, and nothing after it.
+    return s[end].to_int() == 0x2e &&
+      fraction_ok(s, end) &&
+      fraction_end(s, end) == n
   }
   if !(digits(0, 4) && dash(4) && digits(5, 2) && dash(7) && digits(8, 2)) {
     return false
   }
   if n == 10 {
-    // A date on its own.
-    return true
+    // A date on its own, which exists only from 0.5.
+    return caps.local_dt
   }
   if n < 11 {
     return false
@@ -655,16 +901,20 @@ fn moment_ok(s : String) -> Bool {
   if sep != 0x54 && sep != 0x74 && sep != 0x20 {
     return false
   }
-  if !time_ok(s, 11) {
+  let end0 = time_len(s, 11, caps.opt_secs)
+  if end0 < 0 {
     return false
   }
-  let mut end = 19
-  if fraction_ok(s, end) {
+  let mut end = end0
+  if end < n && s[end].to_int() == 0x2e {
+    if !fraction_ok(s, end) {
+      return false
+    }
     end = fraction_end(s, end)
   }
   if end == n {
-    // A local date-time: no offset.
-    return true
+    // A local date-time: no offset, allowed only from 0.5.
+    return caps.local_dt
   }
   let offset = s[end].to_int()
   if offset == 0x5a || offset == 0x7a {
@@ -678,8 +928,9 @@ fn moment_ok(s : String) -> Bool {
 }
 
 ///|
-/// Whether `HH:MM:SS` is at `from`.
-fn time_ok(s : String, from : Int32) -> Bool {
+/// Where a time at `from` ends — past `HH:MM:SS`, or past `HH:MM` when seconds
+/// are optional — or -1 when the text is not a time.
+fn time_len(s : String, from : Int32, opt_secs : Bool) -> Int32 {
   let n = s.length()
   let digit = fn(i : Int32) -> Bool {
     if i >= n {
@@ -688,15 +939,27 @@ fn time_ok(s : String, from : Int32) -> Bool {
     let c = s[i].to_int()
     c >= 0x30 && c <= 0x39
   }
-  from + 8 <= n &&
-  digit(from) &&
-  digit(from + 1) &&
-  s[from + 2].to_int() == 0x3a &&
-  digit(from + 3) &&
-  digit(from + 4) &&
-  s[from + 5].to_int() == 0x3a &&
-  digit(from + 6) &&
-  digit(from + 7)
+  if !(from + 5 <= n &&
+    digit(from) &&
+    digit(from + 1) &&
+    s[from + 2].to_int() == 0x3a &&
+    digit(from + 3) &&
+    digit(from + 4)) {
+    return -1
+  }
+  let e = from + 5
+  if e < n && s[e].to_int() == 0x3a {
+    // `:SS` follows.
+    if e + 3 > n || !digit(e + 1) || !digit(e + 2) {
+      return -1
+    }
+    e + 3
+  } else if opt_secs {
+    // `HH:MM`, the seconds dropped.
+    e
+  } else {
+    -1
+  }
 }
 
 ///|
@@ -749,8 +1012,9 @@ fn dateish(s : String) -> Bool {
 ///
 /// An integer is kept as 64 bits, which is what the format calls it; a float is
 /// the nearest double, and keeps the text it was written as so it can be written
-/// back the way it came.
-fn number(text : String, at : At) -> Value raise Refused {
+/// back the way it came. A prefixed integer and `inf`/`nan` exist only from 0.5,
+/// so the edition decides whether they are numbers here.
+fn number(text : String, at : At, caps : Caps) -> Value raise Refused {
   let mut at_sign = 0
   let mut negative = false
   if text.length() > 0 {
@@ -764,8 +1028,8 @@ fn number(text : String, at : At) -> Value raise Refused {
   if body.length() == 0 {
     raise BadNumber(at)
   }
-  // TOML writes a prefixed integer with no sign.
-  if body.length() >= 2 && body[0].to_int() == 0x30 {
+  // TOML writes a prefixed integer with no sign, from 0.5.
+  if caps.prefixed && body.length() >= 2 && body[0].to_int() == 0x30 {
     let radix = match body[1].to_int() {
       0x78 => 16
       0x6f => 8
@@ -791,13 +1055,15 @@ fn number(text : String, at : At) -> Value raise Refused {
       return Value::Integer(whole)
     }
   }
-  match body {
-    "inf" =>
-      return Value::Float(
-        Real::new(if negative { -@double.infinity } else { @double.infinity }),
-      )
-    "nan" => return Value::Float(Real::new(@double.not_a_number))
-    _ => ()
+  if caps.inf_nan {
+    match body {
+      "inf" =>
+        return Value::Float(
+          Real::new(if negative { -@double.infinity } else { @double.infinity }),
+        )
+      "nan" => return Value::Float(Real::new(@double.not_a_number))
+      _ => ()
+    }
   }
   let digits = strip_underscores(body, at, 10)
   if digits.length() == 0 {
@@ -1127,8 +1393,33 @@ fn Reader::escape(self : Reader, out : StringBuilder) -> Unit raise Refused {
     0x5c => out.write_char('\\')
     0x75 => self.hex(out, 4, at)
     0x55 => self.hex(out, 8, at)
+    // The escapes 1.1 adds, for the two code points a person would otherwise
+    // spell long.
+    0x65 =>
+      if self.caps.e_esc {
+        out.write_char('\u{1b}')
+      } else {
+        raise BadEscape(at)
+      }
+    0x78 => if self.caps.x_esc { self.x2(out, at) } else { raise BadEscape(at) }
     _ => raise BadEscape(at)
   }
+}
+
+///|
+/// A two-digit hex escape, `\xHH`, for the first 255 code points.
+fn Reader::x2(
+  self : Reader,
+  out : StringBuilder,
+  at : At,
+) -> Unit raise Refused {
+  guard nibble(self.cur()) is Some(h) else { raise BadEscape(at) }
+  let b = h.to_int64() << 4
+  self.bump()
+  guard nibble(self.cur()) is Some(l) else { raise BadEscape(at) }
+  let v = b | l.to_int64()
+  self.bump()
+  out.write_char(v.to_int().unsafe_to_char())
 }
 
 ///|

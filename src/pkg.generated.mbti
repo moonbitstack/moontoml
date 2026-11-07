@@ -12,6 +12,8 @@ pub fn decode(StringView, flavor? : Flavor) -> Value raise Refused
 
 pub fn decode_bytes(BytesView, flavor? : Flavor, bom? : Bool) -> Value raise Refused
 
+pub fn decode_doc(StringView, flavor? : Flavor) -> Doc raise Refused
+
 pub let depth : Int32
 
 pub fn dump(@json.Json, sort? : Bool) -> Bytes
@@ -37,6 +39,7 @@ pub(all) suberror Refused {
   BadNumber(At)
   BadDate(At)
   Redefined(At, String)
+  MixedArray(At)
   Trailing(At)
   TooDeep(At)
   BadUtf8(At)
@@ -63,14 +66,59 @@ pub fn At::to_repr(Self) -> @debug.Repr
 pub fn At::to_string(Self) -> String
 pub impl Show for At
 
+#derive(@debug.Debug)
+pub(all) struct Doc {
+  src : String
+  mut items : Array[Item]
+  root : Value
+}
+pub fn Doc::decode(StringView, flavor? : Flavor) -> Self raise Refused
+pub fn Doc::get(Self, Array[String]) -> Value?
+pub fn Doc::render(Self) -> String
+pub fn Doc::set(Self, Array[String], Value) -> Bool?
+pub fn Doc::to_repr(Self) -> @debug.Repr
+pub fn Doc::value(Self) -> Value
+
+#derive(Eq, @debug.Debug)
+pub(all) enum Edition {
+  V04
+  V05
+  V100
+  V110
+}
+pub fn Edition::equal(Self, Self) -> Bool
+pub fn Edition::not_equal(Self, Self) -> Bool
+pub fn Edition::to_repr(Self) -> @debug.Repr
+
 #derive(Eq, @debug.Debug)
 pub(all) struct Flavor {
   depth : Int32
+  edition : Edition
 }
 pub fn Flavor::equal(Self, Self) -> Bool
-pub fn Flavor::new(depth? : Int32) -> Self
+pub fn Flavor::new(depth? : Int32, edition? : Edition) -> Self
 pub fn Flavor::not_equal(Self, Self) -> Bool
 pub fn Flavor::to_repr(Self) -> @debug.Repr
+
+#derive(@debug.Debug)
+pub(all) struct Item {
+  kind : ItemKind
+  path : Array[String]
+  start : Int32
+  vstart : Int32
+  vend : Int32
+  end : Int32
+  mut changed : Bool
+}
+pub fn Item::to_repr(Self) -> @debug.Repr
+pub fn Item::value_of(Self, Value) -> Value
+
+#derive(@debug.Debug)
+pub(all) enum ItemKind {
+  Header
+  Pair
+}
+pub fn ItemKind::to_repr(Self) -> @debug.Repr
 
 #derive(@debug.Debug)
 pub(all) struct Real {
