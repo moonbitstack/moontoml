@@ -46,18 +46,34 @@
 <div class="grp"><b>moonbitstack/moontoml</b>
 <a href="#moontoml-refused">Refused</a>
 <a href="#moontoml-at">At</a>
+<a href="#moontoml-doc">Doc</a>
+<a href="#moontoml-edition">Edition</a>
 <a href="#moontoml-flavor">Flavor</a>
+<a href="#moontoml-item">Item</a>
+<a href="#moontoml-itemkind">ItemKind</a>
 <a href="#moontoml-real">Real</a>
 <a href="#moontoml-value">Value</a>
 <a href="#moontoml-functions">Functions</a>
 <a href="#moontoml-values">Values</a>
+</div>
+<div class="grp"><b>moonbitstack/moontoml/v04</b>
+<a href="#v04-functions">Functions</a>
+<a href="#v04-values">Values</a>
+</div>
+<div class="grp"><b>moonbitstack/moontoml/v05</b>
+<a href="#v05-functions">Functions</a>
+<a href="#v05-values">Values</a>
+</div>
+<div class="grp"><b>moonbitstack/moontoml/v110</b>
+<a href="#v110-functions">Functions</a>
+<a href="#v110-values">Values</a>
 </div>
   </aside>
   <div class="reference">
     <p class="eyebrow">Reference</p>
     <h1>API</h1>
     <p class="lede">Every public type, function and value. Signatures are the ones the compiler writes; the notes are the documentation comments in the source.</p>
-<section id="moontoml-top"><h2>moonbitstack/moontoml</h2><p>TOML 1.0.0: read a document into a Json tree, and write a Json tree back as TOML.</p>
+<section id="moontoml-top"><h2>moonbitstack/moontoml</h2><p>TOML 1.0.0: read a document into a Json tree, kind for kind, or as the document kept, and write it back. Every reader takes a <code>flavor</code> that names the edition, the preset being <code>strict</code>.</p>
 <article id="moontoml-refused"><h3><span class="kind">error</span> Refused</h3>
 <p>Why a document was refused.</p><p><code>Redefined</code> is the rule that matters most: §1 says a key may be defined only once, and so may a table, so a second definition is an error rather than a value that wins. It is the rule that makes a TOML file safe to append to.</p>
 <pre class="sig"><code>pub(all) suberror Refused {
@@ -67,11 +83,12 @@
   BadNumber(At)
   BadDate(At)
   Redefined(At, String)
+  MixedArray(At)
   Trailing(At)
   TooDeep(At)
   BadUtf8(At)
 }</code></pre>
-<div class="member" id="moontoml-refused-at"><pre class="sig"><code>pub fn Refused::at(Self) -&gt; At</code></pre><p>Where the refusal happened.</p><p>Every variant carries a position, so a caller reporting a line does not have to match all nine of them to get at it.</p></div>
+<div class="member" id="moontoml-refused-at"><pre class="sig"><code>pub fn Refused::at(Self) -&gt; At</code></pre><p>Where the refusal happened.</p><p>Every variant carries a position, so a caller reporting a line does not have to match all ten of them to get at it.</p></div>
 </article>
 <article id="moontoml-at"><h3><span class="kind">struct</span> At</h3>
 <p>Where in the source something is: the offset in code units, and the line and column a person counts from one.</p>
@@ -81,12 +98,55 @@
   column : Int32
 }</code></pre>
 </article>
+<article id="moontoml-doc"><h3><span class="kind">struct</span> Doc</h3>
+<p>A document that remembers how it was written.</p><p>The other entry points read a TOML document into a tree and forget the page it came from. This one keeps the page: the source text, the items in the order they were read, each with the bytes it occupied, and the tree they denote. Change one value in place and write the result back, and the rest of the document is byte for byte as it was — the comments, the blank lines, the order, and the spelling of every value but the one that moved.</p><p>This is the reading for a file a person edits by hand — <code>moon.mod</code>, a service config, a manifest — where the diff should be the one line that changed.</p>
+<pre class="sig"><code>pub(all) struct Doc {
+  src : String
+  mut items : Array[Item]
+  root : Value
+}</code></pre>
+<div class="member" id="moontoml-doc-decode"><pre class="sig"><code>pub fn Doc::decode(StringView, flavor? : Flavor) -&gt; Self raise Refused</code></pre><p>Read a document into a <code>Doc</code>, which keeps it as it was written.</p><p><code>flavor</code> names the edition, the same as the other entry points. A document the edition refuses is refused the same way <code>decode</code> refuses it.</p></div>
+<div class="member" id="moontoml-doc-get"><pre class="sig"><code>pub fn Doc::get(Self, Array[String]) -&gt; Value?</code></pre><p>The value a path names, or nothing when the path does not name a value.</p><p>A path is the segments of a key as a person writes them: <code>[&quot;soil&quot;, &quot;ph&quot;]</code> is the key under the table a <code>[soil]</code> header opens, and <code>[&quot;a&quot;, &quot;b&quot;]</code> is the key written <code>a.b</code>.</p></div>
+<div class="member" id="moontoml-doc-render"><pre class="sig"><code>pub fn Doc::render(Self) -&gt; String</code></pre><p>The document as it was read, with its changed values written back.</p><p>Nothing changed and the answer is the source byte for byte. A value that moved is written where it occupied, the way this module writes one; the key, the separator and anything after the value on the line are the original text, and so is everything between the lines — the comments, the blank lines, the order.</p></div>
+<div class="member" id="moontoml-doc-set"><pre class="sig"><code>pub fn Doc::set(Self, Array[String], Value) -&gt; Bool?</code></pre><p>Change the value a path names, in place.</p><p>The path must name a value already in the document; when it names nothing — a missing key, or a table where a value should stand — the answer is nothing and the document is left as it was. Otherwise the value is replaced, the answer is whether it actually moved, and the line that held it is the only one written fresh when the document is written back.</p></div>
+<div class="member" id="moontoml-doc-value"><pre class="sig"><code>pub fn Doc::value(Self) -&gt; Value</code></pre><p>The tree the document denotes — what <code>decode</code> answers for the same bytes.</p></div>
+</article>
+<article id="moontoml-edition"><h3><span class="kind">enum</span> Edition</h3>
+<p>Which edition of the format a document is read under.</p><p>The editions differ by real grammar: <code>v04</code> has no dotted keys, no hex/octal/binary integers and no <code>inf</code>/<code>nan</code>; <code>v05</code> adds those plus the three local date-time kinds; <code>v100</code> is the current strict reading, and <code>v110</code> relaxes inline tables to span lines with a trailing comma, adds the <code>\x</code> and <code>\e</code> escapes and lets a time drop its seconds.</p>
+<pre class="sig"><code>pub(all) enum Edition {
+  V04
+  V05
+  V100
+  V110
+}</code></pre>
+</article>
 <article id="moontoml-flavor"><h3><span class="kind">struct</span> Flavor</h3>
-<p>How a document is read.</p><p>The preset is <code>strict</code>. Build another with <code>Flavor::new</code>, or update one in place with <code>{ ..strict, depth: 64 }</code>.</p><p>There is no knob for a repeated key. TOML 1.0.0 §1 makes redefinition an error, not a policy, so making it configurable would be offering to read a document the format says is not one.</p>
+<p>How a document is read.</p><p>The preset is <code>strict</code>: TOML 1.0.0 and a nesting limit of 500. Build another with <code>Flavor::new</code>, or update one in place with <code>{ ..strict, depth: 64 }</code>. The version-specific presets live in the <code>v04</code>, <code>v05</code> and <code>v110</code> packages.</p><p>There is no knob for a repeated key. TOML 1.0.0 §1 makes redefinition an error, not a policy, so making it configurable would be offering to read a document the format says is not one.</p>
 <pre class="sig"><code>pub(all) struct Flavor {
   depth : Int32
+  edition : Edition
 }</code></pre>
-<div class="member" id="moontoml-flavor-new"><pre class="sig"><code>pub fn Flavor::new(depth? : Int32) -&gt; Self</code></pre><p>A flavor by name, every knob with the preset&#x27;s value.</p></div>
+<div class="member" id="moontoml-flavor-new"><pre class="sig"><code>pub fn Flavor::new(depth? : Int32, edition? : Edition) -&gt; Self</code></pre><p>A flavor by name, every knob with the preset&#x27;s value.</p></div>
+</article>
+<article id="moontoml-item"><h3><span class="kind">struct</span> Item</h3>
+<p>One thing a document holds, in the order it was read: a table header or a key-value pair.</p><p>The four offsets say where the line and, for a pair, its value sat in the source. The document tiles exactly as the run of its items and the text between them, so writing it back over the source is the original byte for byte unless a pair&#x27;s value has moved, in which case only that value is written fresh and the key, the separator and any trailing comment are kept as they were.</p>
+<pre class="sig"><code>pub(all) struct Item {
+  kind : ItemKind
+  path : Array[String]
+  start : Int32
+  vstart : Int32
+  vend : Int32
+  end : Int32
+  mut changed : Bool
+}</code></pre>
+<div class="member" id="moontoml-item-value_of"><pre class="sig"><code>pub fn Item::value_of(Self, Value) -&gt; Value</code></pre><p>The value an item of a document holds, walking the tree to its path.</p></div>
+</article>
+<article id="moontoml-itemkind"><h3><span class="kind">enum</span> ItemKind</h3>
+<p>The kind of thing an item of a document is.</p>
+<pre class="sig"><code>pub(all) enum ItemKind {
+  Header
+  Pair
+}</code></pre>
 </article>
 <article id="moontoml-real"><h3><span class="kind">struct</span> Real</h3>
 <p>A float, and the text it was written as.</p><p>TOML spells one number many ways — <code>1e06</code>, <code>1000000.0</code>, <code>1_000_000.0</code> — and a document read and written again should not turn one spelling into another. The text is kept whenever the source had one and it is also a JSON spelling, since that is what a tree of <code>Json</code> can carry; a float built in code has none and is written from its value.</p>
@@ -117,6 +177,7 @@
 <h3 id="moontoml-functions">Functions</h3>
 <div class="member" id="moontoml-decode"><pre class="sig"><code>pub fn decode(StringView, flavor? : Flavor) -&gt; Value raise Refused</code></pre><p>The document in <code>src</code>, kind for kind.</p><p>TOML defines one document rather than a stream, so there is no plural form of this. This is the reading that keeps every distinction the format makes: a date is a date and not text, and an integer is 64 bits and not a double.</p></div>
 <div class="member" id="moontoml-decode_bytes"><pre class="sig"><code>pub fn decode_bytes(BytesView, flavor? : Flavor, bom? : Bool) -&gt; Value raise Refused</code></pre><p>The document in <code>src</code>, decoded as UTF-8.</p><p>TOML 1.0.0 §1 says a file is UTF-8 and does not allow a byte-order mark; <code>bom</code> skips one anyway, because an editor on Windows writes it and refusing the file helps nobody. Pass <code>bom=false</code> to hold the format to its word.</p></div>
+<div class="member" id="moontoml-decode_doc"><pre class="sig"><code>pub fn decode_doc(StringView, flavor? : Flavor) -&gt; Doc raise Refused</code></pre><p>The document in <code>src</code>, kept as it was written.</p><p>This is the reading for a file a person edits: change a value in place and write the result back, and the rest of the document — the comments, the blank lines, the order, the spelling of every value but the one that moved — is the source byte for byte. See <code>Doc</code>.</p></div>
 <div class="member" id="moontoml-dump"><pre class="sig"><code>pub fn dump(@json.Json, sort? : Bool) -&gt; Bytes</code></pre><p>The same, as UTF-8 bytes.</p></div>
 <div class="member" id="moontoml-dumps"><pre class="sig"><code>pub fn dumps(@json.Json, sort? : Bool) -&gt; String</code></pre><p>Write a <code>Json</code> tree as a TOML document.</p><p>Tables go under their own headers and scalars stay at the level they are on, so the output reads like a configuration file someone wrote rather than one a program emitted. An array of tables is written as <code>[[…]]</code> when every one of its elements is a table, and inline otherwise, which is the only honest choice: TOML has no way to spell an array mixing tables with scalars across headers.</p><p><code>sort</code> orders keys by name; off, they keep the order the tree has. A document read by this module and written again carries the same values, but not necessarily the same layout — TOML can spell the same tree several ways.</p><p>A <code>Json</code> tree says &quot;string&quot; for what may have been a date-time, so this leans on the spelling: a string that is a date-time is written as one. <code>encode</code> writes a <code>Value</code> and needs no such guess.</p></div>
 <div class="member" id="moontoml-encode"><pre class="sig"><code>pub fn encode(Value, sort? : Bool) -&gt; String</code></pre><p>Write a tree of <code>Value</code> as a TOML document.</p><p>Each value keeps the kind it has: a <code>String</code> is quoted even when it reads like a date, an <code>Integer</code> is written as the 64 bits it holds, and a <code>Datetime</code> is written bare, because turning it into a quoted string would change what it is.</p></div>
@@ -125,7 +186,49 @@
 <div class="member" id="moontoml-loads"><pre class="sig"><code>pub fn loads(StringView, flavor? : Flavor) -&gt; @json.Json raise Refused</code></pre><p>The document in <code>src</code>, as a tree of <code>Json</code>.</p><p>A date-time comes out as its RFC 3339 text and an integer as a <code>Json</code> number, because a <code>Json</code> tree has no place to keep either apart; <code>decode</code> is the reading that keeps them.</p></div>
 <h3 id="moontoml-values">Values</h3>
 <div class="member" id="moontoml-depth"><pre class="sig"><code>pub let depth : Int32</code></pre><p>How deep a document may nest.</p><p>500 is the preset: deep enough for real configuration, shallow enough that a hostile document cannot run the stack out.</p></div>
-<div class="member" id="moontoml-strict"><pre class="sig"><code>pub let strict : Flavor</code></pre><p>The preset.</p></div>
+<div class="member" id="moontoml-strict"><pre class="sig"><code>pub let strict : Flavor</code></pre><p>The preset: TOML 1.0.0 at the preset depth. The <code>v04</code>, <code>v05</code> and <code>v110</code> packages each fix a different edition and expose the same entry points.</p></div>
+</section>
+<section id="v04-top"><h2>moonbitstack/moontoml/v04</h2><p>TOML 0.4: the same entry points, pinned to the 0.4 grammar — no dotted keys, no prefixed integers, no <code>inf</code> or <code>nan</code>, and only the offset date-time. <code>Value</code>, <code>Flavor</code>, <code>Edition</code>, <code>At</code>, <code>Real</code>, <code>Refused</code> and <code>Doc</code> are the root types, re-exported here.</p>
+<h3 id="v04-functions">Functions</h3>
+<div class="member" id="v04-decode"><pre class="sig"><code>pub fn decode(StringView) -&gt; @moontoml.Value raise @moontoml.Refused</code></pre><p>The document in <code>src</code>, read at TOML 0.4.</p></div>
+<div class="member" id="v04-decode_bytes"><pre class="sig"><code>pub fn decode_bytes(BytesView, bom? : Bool) -&gt; @moontoml.Value raise @moontoml.Refused</code></pre><p>The document in <code>src</code>, read at TOML 0.4, decoded as UTF-8.</p></div>
+<div class="member" id="v04-decode_doc"><pre class="sig"><code>pub fn decode_doc(StringView) -&gt; @moontoml.Doc raise @moontoml.Refused</code></pre><p>The document in <code>src</code>, kept as it was written, read at TOML 0.4.</p></div>
+<div class="member" id="v04-dump"><pre class="sig"><code>pub fn dump(@json.Json, sort? : Bool) -&gt; Bytes</code></pre></div>
+<div class="member" id="v04-dumps"><pre class="sig"><code>pub fn dumps(@json.Json, sort? : Bool) -&gt; String</code></pre></div>
+<div class="member" id="v04-encode"><pre class="sig"><code>pub fn encode(@moontoml.Value, sort? : Bool) -&gt; String</code></pre></div>
+<div class="member" id="v04-encode_bytes"><pre class="sig"><code>pub fn encode_bytes(@moontoml.Value, sort? : Bool) -&gt; Bytes</code></pre></div>
+<div class="member" id="v04-load"><pre class="sig"><code>pub fn load(BytesView, bom? : Bool) -&gt; @json.Json raise @moontoml.Refused</code></pre><p>The document in <code>src</code>, read at TOML 0.4, as a tree of <code>Json</code>, decoded as UTF-8.</p></div>
+<div class="member" id="v04-loads"><pre class="sig"><code>pub fn loads(StringView) -&gt; @json.Json raise @moontoml.Refused</code></pre><p>The document in <code>src</code>, read at TOML 0.4, as a tree of <code>Json</code>.</p></div>
+<h3 id="v04-values">Values</h3>
+<div class="member" id="v04-edition"><pre class="sig"><code>pub let edition : @moontoml.Edition</code></pre><p>The edition this package reads at: every entry point below reads here.</p></div>
+</section>
+<section id="v05-top"><h2>moonbitstack/moontoml/v05</h2><p>TOML 0.5: the same entry points, pinned to the 0.5 grammar — dotted keys, prefixed integers, <code>inf</code> and <code>nan</code>, and the local date-time kinds, with an array of one kind. The types are the root&#x27;s, re-exported here.</p>
+<h3 id="v05-functions">Functions</h3>
+<div class="member" id="v05-decode"><pre class="sig"><code>pub fn decode(StringView) -&gt; @moontoml.Value raise @moontoml.Refused</code></pre><p>The document in <code>src</code>, read at TOML 0.5.</p></div>
+<div class="member" id="v05-decode_bytes"><pre class="sig"><code>pub fn decode_bytes(BytesView, bom? : Bool) -&gt; @moontoml.Value raise @moontoml.Refused</code></pre><p>The document in <code>src</code>, read at TOML 0.5, decoded as UTF-8.</p></div>
+<div class="member" id="v05-decode_doc"><pre class="sig"><code>pub fn decode_doc(StringView) -&gt; @moontoml.Doc raise @moontoml.Refused</code></pre><p>The document in <code>src</code>, kept as it was written, read at TOML 0.5.</p></div>
+<div class="member" id="v05-dump"><pre class="sig"><code>pub fn dump(@json.Json, sort? : Bool) -&gt; Bytes</code></pre></div>
+<div class="member" id="v05-dumps"><pre class="sig"><code>pub fn dumps(@json.Json, sort? : Bool) -&gt; String</code></pre></div>
+<div class="member" id="v05-encode"><pre class="sig"><code>pub fn encode(@moontoml.Value, sort? : Bool) -&gt; String</code></pre></div>
+<div class="member" id="v05-encode_bytes"><pre class="sig"><code>pub fn encode_bytes(@moontoml.Value, sort? : Bool) -&gt; Bytes</code></pre></div>
+<div class="member" id="v05-load"><pre class="sig"><code>pub fn load(BytesView, bom? : Bool) -&gt; @json.Json raise @moontoml.Refused</code></pre><p>The document in <code>src</code>, read at TOML 0.5, as a tree of <code>Json</code>, decoded as UTF-8.</p></div>
+<div class="member" id="v05-loads"><pre class="sig"><code>pub fn loads(StringView) -&gt; @json.Json raise @moontoml.Refused</code></pre><p>The document in <code>src</code>, read at TOML 0.5, as a tree of <code>Json</code>.</p></div>
+<h3 id="v05-values">Values</h3>
+<div class="member" id="v05-edition"><pre class="sig"><code>pub let edition : @moontoml.Edition</code></pre><p>The edition this package reads at: every entry point below reads here.</p></div>
+</section>
+<section id="v110-top"><h2>moonbitstack/moontoml/v110</h2><p>TOML 1.1: the same entry points, pinned to the 1.1 grammar — inline tables that span lines and end with a comma, the <code>\x</code> and <code>\e</code> escapes, and a time that may drop its seconds. The types are the root&#x27;s, re-exported here.</p>
+<h3 id="v110-functions">Functions</h3>
+<div class="member" id="v110-decode"><pre class="sig"><code>pub fn decode(StringView) -&gt; @moontoml.Value raise @moontoml.Refused</code></pre><p>The document in <code>src</code>, read at TOML 1.1.</p></div>
+<div class="member" id="v110-decode_bytes"><pre class="sig"><code>pub fn decode_bytes(BytesView, bom? : Bool) -&gt; @moontoml.Value raise @moontoml.Refused</code></pre><p>The document in <code>src</code>, read at TOML 1.1, decoded as UTF-8.</p></div>
+<div class="member" id="v110-decode_doc"><pre class="sig"><code>pub fn decode_doc(StringView) -&gt; @moontoml.Doc raise @moontoml.Refused</code></pre><p>The document in <code>src</code>, kept as it was written, read at TOML 1.1.</p></div>
+<div class="member" id="v110-dump"><pre class="sig"><code>pub fn dump(@json.Json, sort? : Bool) -&gt; Bytes</code></pre></div>
+<div class="member" id="v110-dumps"><pre class="sig"><code>pub fn dumps(@json.Json, sort? : Bool) -&gt; String</code></pre></div>
+<div class="member" id="v110-encode"><pre class="sig"><code>pub fn encode(@moontoml.Value, sort? : Bool) -&gt; String</code></pre></div>
+<div class="member" id="v110-encode_bytes"><pre class="sig"><code>pub fn encode_bytes(@moontoml.Value, sort? : Bool) -&gt; Bytes</code></pre></div>
+<div class="member" id="v110-load"><pre class="sig"><code>pub fn load(BytesView, bom? : Bool) -&gt; @json.Json raise @moontoml.Refused</code></pre><p>The document in <code>src</code>, read at TOML 1.1, as a tree of <code>Json</code>, decoded as UTF-8.</p></div>
+<div class="member" id="v110-loads"><pre class="sig"><code>pub fn loads(StringView) -&gt; @json.Json raise @moontoml.Refused</code></pre><p>The document in <code>src</code>, read at TOML 1.1, as a tree of <code>Json</code>.</p></div>
+<h3 id="v110-values">Values</h3>
+<div class="member" id="v110-edition"><pre class="sig"><code>pub let edition : @moontoml.Edition</code></pre><p>The edition this package reads at: every entry point below reads here.</p></div>
 </section>
   </div>
 </div>

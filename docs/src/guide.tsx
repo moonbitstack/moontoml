@@ -217,8 +217,107 @@ println(@moontoml.dumps(doc))`,
     ],
   },
   {
-    id: "bytes",
+    id: "kept",
     num: "05",
+    title: "The document, kept",
+    blocks: [
+      {
+        k: "p",
+        text: "`loads` and `decode` forget the page they read. `decode_doc` keeps it, for the file a person edits: the source, every line, the comment before it, the blank lines between. Change one value in place and `render` writes the rest back as it was.",
+      },
+      {
+        k: "code",
+        code: String.raw`let src =
+  #|# a garden
+  #|name = "garden"
+  #|beds = 4
+  #|
+  #|[soil]
+  #|kind = "loam"
+  #|
+let page = @moontoml.decode_doc(src[:])
+let moved = page.set(["beds"], @moontoml.Value::integer(6))
+println(page.render())`,
+      },
+      {
+        k: "out",
+        text: String.raw`# a garden
+name = "garden"
+beds = 6
+
+[soil]
+kind = "loam"`,
+      },
+      {
+        k: "p",
+        text: "Only `beds` moved; the leading comment, the blank line before `[soil]`, and the order of every key are the source, byte for byte. That is the whole point: a diff for a change to one value is one line.",
+      },
+      {
+        k: "p",
+        text: "`get` reaches a value by path — `[\"soil\", \"ph\"]` is the key under a `[soil]` header, `[\"a\", \"b\"]` the key written `a.b` — and `set` replaces one in place, answering `Some(true)` when it moved and `Some(false)` when it was set to what it was. When the path names nothing — a missing key, or a table where a value should stand — `set` answers nothing and the document is left as it was.",
+      },
+      {
+        k: "code",
+        code: String.raw`let page = @moontoml.decode_doc("[t]\nx = 1\n"[:])
+assert_eq(page.get(["t", "x"]), Some(@moontoml.Value::integer(1)))
+assert_eq(page.get(["t", "y"]), None)
+assert_eq(page.set(["nope"], @moontoml.Value::integer(1)), None)`,
+      },
+    ],
+  },
+  {
+    id: "editions",
+    num: "06",
+    title: "The editions",
+    blocks: [
+      {
+        k: "p",
+        text: "The root reads TOML 1.0.0. The editions differ by real grammar, not by opinion: a file is read at the edition it was written in, and the same document that one edition reads, another refuses.",
+      },
+      {
+        k: "table",
+        head: ["Edition", "The grammar"],
+        rows: [
+          ["1.0.0", "dotted keys, prefixed integers, mixed-type arrays, one-line inline tables"],
+          ["1.1", "inline tables that span lines with a trailing comma, \\x and \\e escapes, a time that may drop its seconds"],
+          ["0.5", "dotted keys, prefixed integers, inf and nan, the local date-time kinds; an array of one kind"],
+          ["0.4", "no dotted keys, no prefixed integers, no inf or nan, only the offset date-time"],
+        ],
+      },
+      {
+        k: "p",
+        text: "The editions are subpackages with the same entry points, pinned to their grammar. `moon add` brings in the one you read:",
+      },
+      {
+        k: "code",
+        label: "shell",
+        code: "moon add moonbitstack/moontoml/v110",
+      },
+      {
+        k: "code",
+        code: String.raw`// 1.0.0 refuses an inline table that spans lines
+let refused = try {
+  let _ = @moontoml.loads("p = { x = 1,\n}"[:])
+  false
+} catch {
+  _ => true
+}
+assert_eq(refused, true)
+// v110 reads it in full
+assert_eq(
+  @v110.loads("p = { x = 1,\n y = 2,\n}"[:]).stringify(),
+  "{\"p\":{\"x\":1,\"y\":2}}",
+)`,
+      },
+      {
+        k: "p",
+        text: "A `Flavor` carries an `edition` as well as a `depth`, so the root reads any of them without the subpackage: `Flavor::new(edition=@moontoml.V05)` reads 0.5. The subpackage is the form that pins the grammar where it is read; the flavor is the form that names it at the call.",
+      },
+    ],
+  },
+  {
+    id: "bytes",
+    num: "07",
     title: "Bytes and the byte-order mark",
     blocks: [
       {
@@ -253,7 +352,7 @@ println(where)`,
   },
   {
     id: "refusals",
-    num: "06",
+    num: "08",
     title: "When it refuses",
     blocks: [
       {
@@ -277,7 +376,7 @@ println(outcome)`,
       },
       {
         k: "p",
-        text: "There are nine kinds, and each carries a position:",
+        text: "There are ten kinds, and each carries a position:",
       },
       {
         k: "list",
@@ -288,6 +387,7 @@ println(outcome)`,
           "`BadNumber` — a number TOML cannot spell",
           "`BadDate` — a date or time the calendar does not have",
           "`Redefined` — a key or table defined twice",
+          "`MixedArray` — a second kind of value in an array, at an edition before mixed ones",
           "`Trailing` — content after a value where only a comment or newline may follow",
           "`TooDeep` — nesting past the flavor's limit",
           "`BadUtf8` — bytes that are not UTF-8",
@@ -301,12 +401,12 @@ println(outcome)`,
   },
   {
     id: "limits",
-    num: "07",
+    num: "09",
     title: "Limits",
     blocks: [
       {
         k: "p",
-        text: "`Flavor` holds the one limit a reader has: how deep a document may nest. The preset is `strict`, depth 500.",
+        text: "`Flavor` holds the two things a reader is tuned by: the edition it reads, and how deep a document may nest. The preset is `strict` — 1.0.0, depth 500.",
       },
       {
         k: "code",
@@ -420,7 +520,7 @@ export function Guide() {
             <p className="eyebrow">The guide</p>
             <h1>A whole document, one page at a time.</h1>
             <p className="lede">
-              Eight short chapters. Each one compiles and runs; the output under it is from a real
+              Ten short chapters. Each one compiles and runs; the output under it is from a real
               build, not a sketch.
             </p>
           </header>

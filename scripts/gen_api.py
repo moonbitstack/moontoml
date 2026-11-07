@@ -17,7 +17,31 @@ PACKAGES = [
     (
         "moonbitstack/moontoml",
         ".",
-        "TOML 1.0.0: read a document into a Json tree, and write a Json tree back as TOML.",
+        "TOML 1.0.0: read a document into a Json tree, kind for kind, or as the "
+        "document kept, and write it back. Every reader takes a `flavor` that names "
+        "the edition, the preset being `strict`.",
+    ),
+    (
+        "moonbitstack/moontoml/v04",
+        "v04",
+        "TOML 0.4: the same entry points, pinned to the 0.4 grammar — no dotted keys, "
+        "no prefixed integers, no `inf` or `nan`, and only the offset date-time. "
+        "`Value`, `Flavor`, `Edition`, `At`, `Real`, `Refused` and `Doc` are the root "
+        "types, re-exported here.",
+    ),
+    (
+        "moonbitstack/moontoml/v05",
+        "v05",
+        "TOML 0.5: the same entry points, pinned to the 0.5 grammar — dotted keys, "
+        "prefixed integers, `inf` and `nan`, and the local date-time kinds, with an "
+        "array of one kind. The types are the root's, re-exported here.",
+    ),
+    (
+        "moonbitstack/moontoml/v110",
+        "v110",
+        "TOML 1.1: the same entry points, pinned to the 1.1 grammar — inline tables "
+        "that span lines and end with a comma, the `\\x` and `\\e` escapes, and a time "
+        "that may drop its seconds. The types are the root's, re-exported here.",
     ),
 ]
 

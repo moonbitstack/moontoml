@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Footer, Header, Inline, SecHead } from "./util";
+import { CodeBlock, Footer, Header, Inline, Output, SecHead } from "./util";
 import { LedgerDemo } from "./ledger";
 
 const STATS = [
-  { big: "1.0.0", label: "the specification it reads" },
+  { big: "0.4–1.1", label: "the editions it reads" },
   { big: "4", label: "string forms, with escapes" },
   { big: "4", label: "integer bases: dec, hex, oct, bin" },
   { big: "4", label: "date-time types, read as dates" },
@@ -17,16 +17,26 @@ const FEATURES = [
   },
   {
     no: "II",
-    title: "Refuses what TOML refuses",
-    body: "A key defined twice, a repeated header, a dotted key later opened by a header, a key added to a closed inline table. Each refusal carries a line and a column.",
-  },
-  {
-    no: "III",
     title: "Keeps what a double would lose",
     body: "`decode` gives every value the kind the format says it has: a date is a date, an integer is 64 bits. Through a `Json` tree a number's digits travel beside the value instead, so 9007199254740993 writes back as itself.",
   },
   {
+    no: "III",
+    title: "Keeps the document, not the tree",
+    body: "`decode_doc` holds the page it read: every line, the comment before it, the blank lines between. Change one value and `render` writes the rest back byte for byte, so the diff is the one line that moved.",
+  },
+  {
     no: "IV",
+    title: "Reads it at the edition it was written",
+    body: "A `0.5` file refuses of a `0.4` and reads in full at its own; a `1.1` file of newlines-in-inline-tables and seconds-less time reads at `v110`. The subpackages pin the grammar; the root reads it with a `flavor`.",
+  },
+  {
+    no: "V",
+    title: "Refuses what TOML refuses",
+    body: "A key defined twice, a repeated header, a dotted key later opened by a header, a key added to a closed inline table. Each refusal carries a line and a column.",
+  },
+  {
+    no: "VI",
     title: "Writes it back to read",
     body: "Scalars first, then tables under their own headers, arrays of tables as [[…]]. sort gives one order; off, the document keeps its own.",
   },
@@ -66,6 +76,7 @@ const FAULTS = [
   ["BadNumber(at)", "a number TOML cannot spell"],
   ["BadDate(at)", "a date or time the calendar does not have"],
   ["Redefined(at, key)", "a key or table defined twice"],
+  ["MixedArray(at)", "a second kind of value in an array, at an edition before mixed ones"],
   ["Trailing(at)", "content after a value where only a comment or newline may follow"],
   ["TooDeep(at)", "nesting past the flavor's limit"],
   ["BadUtf8(at)", "bytes that are not UTF-8"],
@@ -197,10 +208,81 @@ export function Home() {
           <Pipeline />
         </section>
 
-        <section className="section" id="faults">
+        <section className="section" id="kept">
           <SecHead
             num="§ 3"
-            title="The nine refusals"
+            title="The document, kept"
+            intro={
+              <Inline text="A tree forgets the page it came from. `decode_doc` does not: it holds every line, the comment before it, and the blank lines between. Change one value and `render` writes the rest back as it was." />
+            }
+          />
+          <div className="kept">
+            <CodeBlock
+              label="moonbit"
+              code={String.raw`let page = @moontoml.decode_doc(src[:])
+let moved = page.set(["beds"], @moontoml.Value::integer(6))
+page.render()  // the rest is the source`}
+            />
+            <Output
+              text={String.raw`# a garden, planted 1979
+name = "garden"  # the one by the gate
+beds = 6
+
+[soil]
+kind = "loam"
+ph = 6.5`}
+            />
+          </div>
+          <p className="kept-note">
+            <Inline text="`get` reaches a value by path, `set` replaces one in place, and `render` answers the document. When the path names nothing, `set` answers nothing and the document is left as it was. This is the reading for `moon.mod` and the config a person edits by hand — the diff is the one line that moved." />
+          </p>
+        </section>
+
+        <section className="section" id="editions">
+          <SecHead
+            num="§ 4"
+            title="The editions"
+            intro={
+              <Inline text="The root reads TOML 1.0.0. The editions differ by real grammar, and the subpackages pin the one their file was written in — the same entry points, only the edition moves." />
+            }
+          />
+          <dl className="editions">
+            <div className="edition">
+              <dt><code>…/moontoml</code></dt>
+              <dd><b>1.0.0</b> — dotted keys, prefixed integers, mixed-type arrays, one-line inline tables</dd>
+            </div>
+            <div className="edition">
+              <dt><code>…/moontoml/v110</code></dt>
+              <dd><b>1.1</b> — inline tables that span lines with a trailing comma, <code>\x</code> and <code>\e</code> escapes, a time that may drop its seconds</dd>
+            </div>
+            <div className="edition">
+              <dt><code>…/moontoml/v05</code></dt>
+              <dd><b>0.5</b> — dotted keys, prefixed integers, <code>inf</code> and <code>nan</code>, the local date-time kinds; an array of one kind</dd>
+            </div>
+            <div className="edition">
+              <dt><code>…/moontoml/v04</code></dt>
+              <dd><b>0.4</b> — no dotted keys, no prefixed integers, no <code>inf</code> or <code>nan</code>, only the offset date-time</dd>
+            </div>
+          </dl>
+          <CodeBlock
+            label="moonbit"
+            code={String.raw`// the 1.0.0 reading refuses a 1.1 file
+let r = try {
+  let _ = @moontoml.loads("p = { x = 1,\n}"[:])
+  false
+} catch {
+  _ => true
+}
+assert_eq(r, true)
+// and v110 reads it in full
+assert_eq(@v110.loads("p = { x = 1,\n}"[:]).stringify(), "{\"p\":{\"x\":1}}")`}
+          />
+        </section>
+
+        <section className="section" id="faults">
+          <SecHead
+            num="§ 5"
+            title="The ten refusals"
             intro={
               <Inline text="Every fault carries an At — offset, line, column. Refused::at reaches it without matching the variant." />
             }
@@ -216,7 +298,7 @@ export function Home() {
         </section>
 
         <section className="section" id="exits">
-          <SecHead num="§ 4" title="Where to go next" />
+          <SecHead num="§ 6" title="Where to go next" />
           <div className="exits">
             <a className="exit" href="guide.html">
               <b>The guide</b>
