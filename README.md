@@ -10,6 +10,7 @@ refuses.</p>
 <p>
 <a href="https://moonbitstack.github.io/moontoml/">Home</a> ·
 <a href="https://moonbitstack.github.io/moontoml/guide.html">Guide</a> ·
+<a href="https://moonbitstack.github.io/moontoml/specimens.html">Specimens</a> ·
 <a href="https://moonbitstack.github.io/moontoml/api.html">API</a> ·
 <a href="https://mooncakes.io/docs/moonbitstack/moontoml">mooncakes</a>
 </p>
@@ -238,27 +239,15 @@ was written as travel beside the value whenever RFC 8259 spells it the same way,
 
 ## Conformance
 
-The reader and the writer are checked against `toml-test`, the format's own suite, at the editions
-it lists — 1.0.0 and 1.1.0 — over every file each edition names:
+The reader, the writer and the kept document are checked against the format's own suite at both
+editions it lists — 1.0.0 and 1.1.0 — in both directions, and against two independent
+implementations over the same documents: what this library writes they read, and what they write
+this library reads. There are no known divergences.
 
-| Suite | Edition | Documents | Passing |
-|---|:--:|---|---|
-| valid, read as the tree the suite expects | 1.0.0 | 205 | 205 |
-| valid, written by the library and read back | 1.0.0 | 205 | 205 |
-| invalid, refused | 1.0.0 | 474 | 474 |
-| valid, read as the tree the suite expects | 1.1.0 | 214 | 214 |
-| valid, written by the library and read back | 1.1.0 | 214 | 214 |
-| invalid, refused | 1.1.0 | 467 | 467 |
-| valid, read into the `Doc` and written back byte for byte | 1.0.0 | 205 | 205 |
-| valid, read into the `Doc` and written back byte for byte | 1.1.0 | 214 | 214 |
-
-Nothing is skipped, and no case is expected to fail. The 0.4 and 0.5 editions have no `toml-test`
-file list of their own, so they are checked feature by feature against the edition they grow from:
-every thing 0.5 introduced — a dotted key, a prefixed integer, `inf` or `nan`, a local date-time
-— is refused of a 0.4 and read in full at a 0.5, and what 0.4 already allowed reads the same in
-both. That is the `editions_wbtest` in the conformance package. The corpus is generated into the
-test sources by `scripts/gen_vectors.py`, which pins the release and checks its digest, so the
-numbers above are the ones the tests assert on every backend.
+The 0.4 and 0.5 editions have no file list of their own in the suite, so they are checked feature
+by feature against the edition they grow from: every thing 0.5 introduced — a dotted key, a
+prefixed integer, `inf` or `nan`, a local date-time — is refused of a 0.4 and read in full at a
+0.5, and what 0.4 already allowed reads the same in both.
 
 ## Examples
 
@@ -266,6 +255,7 @@ numbers above are the ones the tests assert on every backend.
 |---|---|
 | [`src/examples/basic`](https://github.com/moonbitstack/moontoml/tree/master/src/examples/basic) | read, change one value, write back — once as a tree, once as the document kept with its comments and order |
 | [`src/examples/integration`](https://github.com/moonbitstack/moontoml/tree/master/src/examples/integration) | a site config read into a struct, changed, written back sorted, and a refusal reported by line |
+| [`src/examples/browser`](https://github.com/moonbitstack/moontoml/tree/master/src/examples/browser) | the glue the [specimen book](https://moonbitstack.github.io/moontoml/specimens.html) compiles into JavaScript; not part of the library's interface |
 
 ```bash
 moon run src/examples/basic
