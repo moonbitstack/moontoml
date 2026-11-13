@@ -30,6 +30,11 @@ keywords = [
   "datetime",
   "rfc3339",
   "json",
+  "moonjson",
+  "javascript",
+  "wasm",
+  "browser",
+  "interop",
   "edition",
   "dialect",
   "fidelity",
@@ -46,7 +51,8 @@ keywords = [
 description = "TOML for MoonBit, at the edition the file was written in, with a reading that keeps the document as it was."
 
 import {
-  "moonbitstack/moondate@0.1.6",
+  "moonbitstack/moondate@0.1.7",
+  "moonbitstack/moonjson@0.5.0",
 }
 
 source = "src"
