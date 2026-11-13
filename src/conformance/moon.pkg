@@ -4,10 +4,14 @@
 import {
   "moonbitstack/moontoml",
   "moonbitstack/moondate",
-  "moonbitlang/core/json",
+  "moonbitstack/moonjson",
   "moonbitlang/core/string",
   "moonbitlang/core/encoding/utf8",
 }
+
+import {
+  "moonbitlang/core/json",
+} for "wbtest"
 
 options(
   link: {

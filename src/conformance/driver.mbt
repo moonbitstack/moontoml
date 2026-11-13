@@ -16,7 +16,7 @@ pub fn decode_document(src : Bytes, edition : Int32) -> String {
     fault => Err(fault.to_string())
   }
   match got {
-    Ok(value) => envelope(true, typed(value).stringify())
+    Ok(value) => envelope(true, @moonjson.dumps(typed(value)))
     Err(why) => envelope(false, why)
   }
 }
@@ -41,7 +41,9 @@ pub fn encode_document(src : Bytes) -> String {
   let text = @utf8.decode(src, ignore_bom=false) catch {
     _ => return envelope(false, "the input is not UTF-8")
   }
-  let tree = Ok(of_typed(@json.parse(text[:]))) catch { _ => Err(()) }
+  let tree = Ok(of_typed(@moonjson.loads(text[:], @moonjson.strict))) catch {
+    _ => Err(())
+  }
   match tree {
     Ok(value) => envelope(true, @moontoml.encode(value))
     Err(_) => envelope(false, "the input is not a toml-test tree")
@@ -50,9 +52,7 @@ pub fn encode_document(src : Bytes) -> String {
 
 ///|
 fn envelope(ok : Bool, text : String) -> String {
-  "{\"ok\":" +
-  (if ok { "true" } else { "false" }) +
-  ",\"text\":" +
-  Json::string(text).stringify() +
-  "}"
+  @moonjson.dumps(
+    Json::object({ "ok": Json::boolean(ok), "text": Json::string(text) }),
+  )
 }
