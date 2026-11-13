@@ -115,3 +115,13 @@ jobs:
           "$RUNNER_TEMP/toml-test/toml-test" test -toml 1.1.0 -color never \
             -decoder "node scripts/toml_test_driver.mjs decode 11" \
             -encoder "node scripts/toml_test_driver.mjs encode"
+
+      # Two independent implementations, both directions, over the same corpus:
+      # CPython's tomllib reads what our writer emits, tomli-w writes what our
+      # reader reads, and both read the suite's own bytes the way we do.
+      - name: interop with CPython tomllib and tomli-w
+        if: runner.os == 'Linux'
+        run: |
+          python3 -m venv "$RUNNER_TEMP/moontoml-interop"
+          "$RUNNER_TEMP/moontoml-interop/bin/python" -m pip install --quiet tomli-w==1.2.0
+          "$RUNNER_TEMP/moontoml-interop/bin/python" scripts/interop_python.py
