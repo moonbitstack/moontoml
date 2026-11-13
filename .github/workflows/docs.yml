@@ -43,14 +43,14 @@ jobs:
       - name: build the site
         run: |
           moon update
-          moon build --target js --release src/examples/inspector
+          moon build --target js --release src/examples/browser
           mkdir -p docs/engine
-          cp _build/js/release/build/examples/inspector/inspector.js docs/engine/moontoml.js
+          cp _build/js/release/build/examples/browser/browser.js docs/engine/moontoml.js
           (cd docs && npm install --no-audit --no-fund && npm run build)
           python3 scripts/gen_api.py
           git diff --exit-code docs/api.html
           mkdir -p _site
-          cp docs/index.html docs/guide.html docs/api.html _site/
+          cp docs/index.html docs/guide.html docs/specimens.html docs/api.html _site/
           cp -r docs/assets docs/engine _site/
 
 
