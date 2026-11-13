@@ -1,10 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-
-declare global {
-  interface Window {
-    moontoml?: { inspect(src: string, sort: boolean): string };
-  }
-}
+import { useEngine } from "./engine";
 
 type Result =
   | { ok: true; tree: unknown; copy: string }
@@ -217,9 +212,7 @@ export function LedgerDemo() {
     typeof location === "undefined" ? null : new URLSearchParams(location.search).get("sample");
   const start = SAMPLES.find((s) => s.id === wanted) ?? SAMPLES[0];
 
-  const [engine, setEngine] = useState<Window["moontoml"]>(() =>
-    typeof window === "undefined" ? undefined : window.moontoml,
-  );
+  const engine = useEngine();
   const [src, setSrc] = useState(start.src);
   const [active, setActive] = useState(start.id);
   const [sort, setSort] = useState(false);
@@ -227,13 +220,6 @@ export function LedgerDemo() {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const backRef = useRef<HTMLPreElement>(null);
   const gutRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (engine) return;
-    const ready = () => setEngine(window.moontoml);
-    addEventListener("moontoml:ready", ready);
-    return () => removeEventListener("moontoml:ready", ready);
-  }, [engine]);
 
   const result = useMemo<Result | null>(() => {
     if (!engine) return null;

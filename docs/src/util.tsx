@@ -38,7 +38,7 @@ export function GithubIcon() {
 
 /* ---------- header / footer -------------------------------------------- */
 
-export type Page = "home" | "guide" | "api";
+export type Page = "home" | "guide" | "specimens" | "api";
 
 export function Header({ page }: { page: Page }) {
   const [, toggle] = useTheme();
@@ -57,6 +57,9 @@ export function Header({ page }: { page: Page }) {
           </a>
           <a href="guide.html" aria-current={page === "guide" ? "page" : undefined}>
             Guide
+          </a>
+          <a href="specimens.html" aria-current={page === "specimens" ? "page" : undefined}>
+            Specimens
           </a>
           <a href="api.html" aria-current={page === "api" ? "page" : undefined}>
             API

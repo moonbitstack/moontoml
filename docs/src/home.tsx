@@ -304,6 +304,10 @@ assert_eq(@v110.loads("p = { x = 1,\n}"[:]).stringify(), "{\"p\":{\"x\":1}}")`}
               <b>The guide</b>
               <span>install, read, write, refuse</span>
             </a>
+            <a className="exit" href="specimens.html">
+              <b>The specimens</b>
+              <span>four grammars, one moved line, ten refusals</span>
+            </a>
             <a className="exit" href="api.html">
               <b>The API</b>
               <span>every type, function and value</span>
