@@ -1,7 +1,0 @@
-import {
-  "moonbitstack/moontoml",
-}
-
-options(
-  link: { "js": { "exports": [ "inspect" ], "format": "esm" } },
-)

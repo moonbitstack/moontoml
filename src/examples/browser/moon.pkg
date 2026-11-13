@@ -1,0 +1,14 @@
+import {
+  "moonbitstack/moontoml",
+  "moonbitstack/moonjson",
+  "moonbitlang/core/json",
+}
+
+options(
+  link: {
+    "js": {
+      "exports": [ "inspect", "editions", "kept", "fault", "fault_bytes" ],
+      "format": "esm",
+    },
+  },
+)
