@@ -243,6 +243,28 @@ def render():
         "<!-- body -->", "\n".join(body)
     )
     (ROOT / "docs" / "api.html").write_text(page, encoding="utf-8", newline="\n")
+    verify(page)
+
+
+def verify(page):
+    """Every public declaration in an interface file has its place on the page.
+
+    The trait methods the page folds into their type are the ones `render` skips;
+    nothing else may be dropped. Interface files carry generic functions too, so
+    this reads the same declarations `render` reads rather than a hand list.
+    """
+    skipped = re.compile(
+        r"::(equal|not_equal|output|to_string|to_repr|hash|hash_combine|compare|op_\w+)\("
+    )
+    missing = []
+    for pkg, folder, _ in PACKAGES:
+        for kind, name, text, _ in items_of(folder):
+            if kind == "method" and skipped.search(text):
+                continue
+            if 'id="{}"'.format(anchor(pkg, name)) not in page:
+                missing.append("{} {}".format(pkg, name))
+    if missing:
+        raise SystemExit("API reference is missing: " + ", ".join(missing))
 
 
 render()
