@@ -1049,7 +1049,7 @@ fn number(text : String, at : At, caps : Caps) -> Value raise Refused {
           raise BadNumber(at)
         }
       }
-      let whole = @string.parse_int64(digits[:], base=radix) catch {
+      let whole = @string.parse_int64(digits[:], radix~) catch {
         _ => raise BadNumber(at)
       }
       return Value::Integer(whole)
