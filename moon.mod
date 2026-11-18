@@ -1,6 +1,6 @@
 name = "moonbitstack/moontoml"
 
-version = "0.2.0"
+version = "0.2.1"
 
 readme = "README.md"
 
@@ -51,8 +51,8 @@ keywords = [
 description = "TOML for MoonBit, at the edition the file was written in, with a reading that keeps the document as it was."
 
 import {
-  "moonbitstack/moondate@0.1.7",
-  "moonbitstack/moonjson@0.5.0",
+  "moonbitstack/moondate@0.2.1",
+  "moonbitstack/moonjson@0.5.1",
 }
 
 source = "src"
